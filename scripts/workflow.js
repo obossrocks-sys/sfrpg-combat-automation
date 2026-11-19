@@ -11,6 +11,14 @@ import { bar } from "./options-bar.js";
 /** Damage rolls waiting to be linked to their workflow, keyed by workflow id. */
 const pendingDamage = new Map();
 
+/**
+ * Attacks the module is handling, keyed by actor id, so preCreateChatMessage can strip
+ * sfrpg's hit tag. sfrpg calls ChatMessage.create without awaiting it and then fires
+ * attackRolled synchronously, so this is set before the message's pre-create hook runs
+ * (by which time the targets may already be cleared).
+ */
+const stripFor = new Map();
+
 function isHandledItem(actor, item) {
     if (!actor || !item) return false;
     if (["starshipWeapon", "vehicleAttack"].includes(item.type)) return false;
@@ -103,7 +111,10 @@ export function onPreCreateChatMessage(message, data) {
         const flags = data.flags?.sfrpg ?? message.flags?.sfrpg;
         if (flags?.rollType !== "attack") return;
         if (!flags.rollOptions?.actionTargetSource?.kac) return; // starship/vehicle sources differ
-        if (!currentTargets().length) return;
+        const actorId = data.speaker?.actor ?? message.speaker?.actor;
+        const until = stripFor.get(actorId);
+        if (!until || until < Date.now()) return;
+        stripFor.delete(actorId);
         const content = data.content ?? message.content;
         if (!content) return;
         const doc = new DOMParser().parseFromString(`<div>${content}</div>`, "text/html");
@@ -130,6 +141,7 @@ export async function onAttackRolled({ actor, item, roll, rollMetadata }) {
     // Capture everything synchronously: targets, cover and options can change while we await.
     const targets = currentTargets();
     if (!targets.length) return;
+    stripFor.set(actor.id, Date.now() + 5000);
     const attackerToken = findAttackerToken(actor);
     const cover = bar.consumeCover();
     const optionsUsed = bar.activeOptionKeys();
