@@ -6,8 +6,11 @@
 import { MODULE_ID, ATTACK_OPTIONS, COVER } from "./constants.js";
 import { getSetting } from "./settings.js";
 
-function globalMod(key) {
-    return CONFIG.SFRPG?.globalAttackRollModifiers?.find(m => m.bonus?.name === key)?.bonus ?? null;
+function globalMod(opt) {
+    const list = CONFIG.SFRPG?.globalAttackRollModifiers ?? [];
+    const found = list.find(m => m.bonus?._id === opt.id)
+        ?? list.find(m => m.bonus?.name === opt.key || m.bonus?.name === game.i18n.localize(opt.key));
+    return found?.bonus ?? null;
 }
 
 class AttackBar {
@@ -28,7 +31,7 @@ class AttackBar {
     }
 
     #sync(k) {
-        const mod = globalMod(ATTACK_OPTIONS[k].key);
+        const mod = globalMod(ATTACK_OPTIONS[k]);
         if (mod) mod.enabled = !!this.state.options[k];
     }
 
@@ -71,7 +74,7 @@ class AttackBar {
         this.el?.remove();
         this.el = null;
         for (const k of Object.keys(ATTACK_OPTIONS)) {
-            const mod = globalMod(ATTACK_OPTIONS[k].key);
+            const mod = globalMod(ATTACK_OPTIONS[k]);
             if (mod) mod.enabled = false;
         }
     }
