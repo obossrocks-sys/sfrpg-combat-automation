@@ -31,6 +31,12 @@ export function registerSettings() {
         hint: "sfrpg prints \"vs KAC 18: HIT\" on the attack roll for the first target. The module's card replaces it, so the tag (and the AC in it) is removed when the module handles the attack.",
         scope: "world", config: true, type: Boolean, default: true
     });
+    reg("hidePublicOnGM", {
+        name: "GM sees only the GM card",
+        hint: "Hide the public card (Hit, Miss or Crit and the damage dealt) on GM screens, since the GM card already shows it. Players still get the public card.",
+        scope: "world", config: true, type: Boolean, default: true,
+        onChange: () => applyGmView()
+    });
     reg("clearTargets", {
         name: "Clear targets after each attack",
         scope: "world", config: true, type: Boolean, default: true
@@ -51,3 +57,12 @@ export function registerSettings() {
 }
 
 export const getSetting = (key) => game.settings.get(MODULE_ID, key);
+
+/** Hide or show the public cards on this screen (GMs only, per the setting). */
+export function applyGmView() {
+    let hide = false;
+    try {
+        hide = !!game.user?.isGM && !!getSetting("hidePublicOnGM");
+    } catch { /* settings not ready */ }
+    document.body.classList.toggle("sca-hide-public", hide);
+}

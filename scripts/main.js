@@ -1,5 +1,5 @@
 import { MODULE_ID } from "./constants.js";
-import { registerSettings } from "./settings.js";
+import { registerSettings, applyGmView } from "./settings.js";
 import { setupSocket, registerHandler } from "./socket.js";
 import { onAttackRolled, onDamageRolled, onPreCreateChatMessage } from "./workflow.js";
 import { processAttack } from "./apply.js";
@@ -31,6 +31,7 @@ function start() {
 
     bar.load();
     bar.render();
+    applyGmView();
 
     const api = { bar, rules, teardown };
     globalThis.SFRPGCombatAutomation = api;
@@ -43,6 +44,7 @@ function start() {
 export function teardown() {
     for (const [name, id] of hookIds.splice(0)) Hooks.off(name, id);
     bar.close();
+    document.body.classList.remove("sca-hide-public");
     started = false;
 }
 
@@ -51,5 +53,5 @@ globalThis.SFRPGCombatAutomation?.teardown?.();
 
 Hooks.once("init", registerSettings);
 Hooks.once("socketlib.ready", setupSocket);
-if (game.ready) start();
+if (globalThis.game?.ready) start();
 else Hooks.once("ready", start);

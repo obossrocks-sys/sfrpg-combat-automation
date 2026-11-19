@@ -25,6 +25,10 @@
 .sca-card .sca-row-head { display: flex; align-items: center; gap: 6px; }
 .sca-card .sca-line { font-size: 0.88em; padding-left: 2px; }
 .sca-card .sca-notes { opacity: 0.75; font-style: italic; }
+.sca-card .sca-warn { color: #b35900; font-weight: bold; }
+
+/* GM screens: the public card is hidden when the setting is on (the GM card covers it). */
+body.sca-hide-public .chat-message.sca-public-msg { display: none; }
 .sca-card .sca-foot { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 4px; }
 .sca-card .sca-btn { flex: 0 0 auto; width: auto; line-height: 1.4; padding: 0 8px; font-size: 0.85em; min-height: 0; height: auto; }
 .sca-card.sca-undone .sca-targets { opacity: 0.5; text-decoration: line-through; }

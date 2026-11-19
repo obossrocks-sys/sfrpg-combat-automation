@@ -77,6 +77,9 @@ function gmRow(t, i, wf) {
     if (t.flipped) notes.push("flipped by GM");
     if (t.note) notes.push(t.note);
     const noteLine = notes.length ? `<div class="sca-line sca-notes">${esc(notes.join(" · "))}</div>` : "";
+    const reachLine = t.reach?.outOfReach
+        ? `<div class="sca-line sca-warn"><i class="fa-solid fa-triangle-exclamation"></i> Out of reach: ${esc(t.reach.distance)} ft away, reach ${esc(t.reach.reach)} ft</div>`
+        : "";
     let dmg = "";
     if (ap) {
         const b = ap.before, a = ap.after;
@@ -97,7 +100,7 @@ function gmRow(t, i, wf) {
             ${wf.undone ? "" : `<button type="button" class="sca-btn" data-sca-action="flip" data-sca-index="${i}">${flipLabel}</button>`}
             ${canApply ? `<button type="button" class="sca-btn" data-sca-action="apply" data-sca-index="${i}">Apply</button>` : ""}
         </div>
-        ${roll}${noteLine}${dmg}
+        ${reachLine}${roll}${noteLine}${dmg}
     </li>`;
 }
 
@@ -146,6 +149,11 @@ export function onRenderChatMessage(message, html) {
     const el = html instanceof HTMLElement ? html : html?.[0];
     if (!el) return;
     const flags = message.flags?.[MODULE_ID];
+    if (flags?.public) {
+        // Hidden on GM screens by CSS when the setting is on (see applyGmView).
+        el.classList.add("sca-public-msg");
+        return;
+    }
     if (!flags?.gm) return;
     if (!game.user.isGM) {
         el.querySelectorAll("[data-sca-action]").forEach(b => b.remove());

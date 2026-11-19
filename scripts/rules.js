@@ -91,6 +91,65 @@ export function tokenDistance(a, b) {
     return Number.isFinite(best) ? best : null;
 }
 
+/** Fewest squares between two tokens' nearest squares (king's moves), or null off a square grid. */
+function squareGap(a, b) {
+    if (!canvas?.grid?.isSquare) return null;
+    try {
+        const oa = a.document.getOccupiedGridSpaceOffsets?.() ?? [];
+        const ob = b.document.getOccupiedGridSpaceOffsets?.() ?? [];
+        if (!oa.length || !ob.length) return null;
+        let best = Infinity;
+        for (const p of oa) for (const q of ob) best = Math.min(best, Math.max(Math.abs(p.i - q.i), Math.abs(p.j - q.j)));
+        return Number.isFinite(best) ? best : null;
+    } catch {
+        return null;
+    }
+}
+
+const TINY_SIZES = ["fine", "diminutive", "tiny"];
+const words = (s) => String(s ?? "").toLowerCase().split(/[^a-z]+/).filter(Boolean).map(w => w.replace(/s$/, ""));
+
+/**
+ * The attacker's reach with this item, in feet. sfrpg stores the actor's reach as text
+ * ("5", "10 ft.", "5 ft. (10 ft. with tactical pike)"); a named exception applies when every
+ * word of it is in the weapon's name. A weapon with the reach property reaches at least 10 ft.
+ * A stored 0 counts only for Tiny and smaller creatures (many Medium NPCs have a 0 by mistake).
+ */
+export function attackerReach(item, actor) {
+    const text = String(actor?.system?.attributes?.reach ?? "").trim();
+    let reach = null;
+    const base = text.match(/^(\d+)/);
+    if (base) reach = Number(base[1]);
+    const itemWords = new Set(words(item?.name));
+    for (const m of text.matchAll(/\((\d+)\s*ft\.?\s*with\s+([^)]+)\)/gi)) {
+        const need = words(m[2]);
+        if (need.length && need.every(w => itemWords.has(w))) reach = Number(m[1]);
+    }
+    const size = actor?.system?.traits?.size;
+    if (reach === 0 && !TINY_SIZES.includes(size)) reach = null;
+    if (reach == null) reach = TINY_SIZES.includes(size) ? 0 : 5;
+    if (item?.system?.properties?.reach?.value) reach = Math.max(reach, 10);
+    return reach;
+}
+
+/**
+ * Melee reach check (a warning only; the attack still resolves). 10-ft reach also reaches
+ * the second square of a diagonal (CRB 255); every other reach measures normally.
+ * Returns null when it doesn't apply.
+ */
+export function reachInfo(item, attackerToken, targetToken) {
+    if (attackKind(item) !== "melee" || !attackerToken || !targetToken) return null;
+    const distance = tokenDistance(attackerToken, targetToken);
+    if (distance == null) return null;
+    const reach = attackerReach(item, attackerToken.actor ?? item.actor);
+    let inReach = distance <= reach;
+    if (!inReach && reach === 10) {
+        const gap = squareGap(attackerToken, targetToken);
+        if (gap != null && gap <= 2) inReach = true;
+    }
+    return { distance, reach, outOfReach: !inReach };
+}
+
 /**
  * Range penalty for a ranged weapon attack. Weapons: -2 per full increment past the first
  * (-1 with Far Shot); max 10 increments (thrown 5). Returns null when range doesn't apply.
@@ -164,6 +223,8 @@ export function resolveTarget({ item, roll, attackerToken, targetToken, cover = 
         out.helplessBonus = 4;
         out.notes.push("helpless: melee +4");
     }
+
+    out.reach = reachInfo(item, attackerToken, targetToken);
 
     const r = rangeInfo(item, attackerToken, targetToken);
     out.range = r;
