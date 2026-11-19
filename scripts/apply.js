@@ -214,7 +214,7 @@ export async function processAttack(wf) {
 /** Buttons on the GM card. */
 export async function gmAction(message, action, index) {
     if (!game.user.isGM) return;
-    const wf = foundry.utils.deepClone(message.getFlag(MODULE_ID, "workflow"));
+    const wf = foundry.utils.deepClone(message.flags?.[MODULE_ID]?.workflow);
     if (!wf) return;
     const t = index != null ? wf.targets[index] : null;
 
