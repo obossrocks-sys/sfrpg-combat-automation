@@ -2,7 +2,7 @@
 
 Combat automation for the Starfinder 1e (sfrpg) system in Foundry VTT, in the spirit of MidiQOL: targeted attacks against EAC/KAC, hit, miss and crit per target, damage rolled on a hit and applied on the GM's client with the system's own DR, energy resistance, immunity, vulnerability, temp HP, Stamina and HP math, then nonlethal and 0 HP. Saves for spells, abilities and grenades (full, half or none per target, Evasion, spell resistance), and area weapons (explode, blast, line, automatic). One card per attack or effect with Undo and flips.
 
-**Status:** layer 2 in development (v0.2.0). Layer 1 is v0.1.0 (Nov 19, 2026), tested on Foundry 14.370 with sfrpg 14.0.2.
+**Status:** v0.2.0 (Nov 19, 2026): layers 1 and 2, tested on Foundry 14.370 with sfrpg 14.0.2. Works on Foundry 13 and 14 (v14 stores templates as Regions; the module handles both).
 
 ## Install
 Requires **socketlib**. In Foundry's setup screen, Add-on Modules → Install Module, paste the manifest URL:

@@ -2,9 +2,11 @@
   "id": "sfrpg-combat-automation",
   "title": "SFRPG Combat Automation",
   "description": "Targeted attacks for Starfinder 1e: picks EAC or KAC, calls hit, miss and critical per target (cover, prone, range), rolls damage on a hit and applies it on the GM's client with the system's own DR, energy resistance, Stamina and HP math, then nonlethal and 0 HP. One card per attack, with Undo and flip hit/miss.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "authors": [
-    { "name": "obossrocks-sys" }
+    {
+      "name": "obossrocks-sys"
+    }
   ],
   "compatibility": {
     "minimum": "13",
@@ -15,7 +17,9 @@
       {
         "id": "sfrpg",
         "type": "system",
-        "compatibility": { "minimum": "14.0.0" }
+        "compatibility": {
+          "minimum": "14.0.0"
+        }
       }
     ],
     "requires": [
@@ -25,8 +29,12 @@
       }
     ]
   },
-  "esmodules": ["scripts/main.js"],
-  "styles": ["styles/sca.css"],
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/sca.css"
+  ],
   "languages": [],
   "socket": true,
   "url": "https://github.com/obossrocks-sys/sfrpg-combat-automation",
