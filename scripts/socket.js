@@ -31,7 +31,8 @@ export async function executeAsUser(name, userId, ...args) {
 
 /** Is a GM connected to run GM-side work? */
 export function gmConnected() {
-    return !!(game.users?.activeGM ?? game.users?.find(u => u.isGM && u.active));
+    if (game.users && "activeGM" in game.users) return !!game.users.activeGM;
+    return !!game.users?.find(u => u.isGM && u.active);
 }
 
 /** Run a handler on the GM's client (locally when this user is a GM). */
