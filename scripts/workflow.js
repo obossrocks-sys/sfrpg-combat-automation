@@ -16,7 +16,7 @@ import { executeAsGM, gmConnected } from "./socket.js";
 import { bar } from "./options-bar.js";
 import { SAVE_LABEL, saveEffect, rangePenaltyFor, stripDCs } from "./logic.js";
 import { itemSaveDC, itemSaveType } from "./saves.js";
-import { areaOf, freshTemplate, consumeTemplate, placeTemplate, tokensInTemplate, distanceToPoint, nearestToPoint, sortByDistance, scatter } from "./areas.js";
+import { areaOf, explodeArea, freshTemplate, consumeTemplate, placeTemplate, tokensInTemplate, distanceToPoint, nearestToPoint, sortByDistance, scatter } from "./areas.js";
 
 /** Damage rolls waiting to be linked to their workflow, keyed by workflow id. */
 const pendingDamage = new Map();
@@ -386,7 +386,7 @@ async function attackFlowLayer1(ctx) {
 
 async function explodeFlow(ctx) {
     const { actor, item, roll, attackerToken, cover, optionsUsed, nonlethal } = ctx;
-    const spec = areaOf(item);
+    const spec = await explodeArea(item);
     let doc = freshTemplate(item);
     const placedNow = !doc;
     if (!doc) doc = await placeTemplate(item, spec);

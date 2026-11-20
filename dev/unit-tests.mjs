@@ -99,6 +99,10 @@ test("explode radius from the property text", () => {
     const s = areaSpec({ properties: { explode: { value: true, extension: "10 ft" } }, area: {}, range: { units: "ft", value: "60" } });
     assert.equal(s.distance, 10);
 });
+test("explode with no radius is a guess", () => {
+    const s = areaSpec({ properties: { explode: { value: true } }, area: {}, range: { units: "ft", value: "20" } });
+    assert.equal(s.guessed, true);
+});
 test("explode radius from the description", () => {
     const s = areaSpec({ properties: { explode: { value: true } }, area: {}, range: { units: "ft", value: "60" } }, { description: "<p>Special explode (2d6 E, 20 ft.)</p>" });
     assert.equal(s.distance, 20);

@@ -108,8 +108,8 @@ export function areaSpec(sys, { autoMode = false, description = "" } = {}) {
     const inc = sys?.range?.units === "ft" ? (Number(sys?.range?.value) || 0) : 0;
 
     if (on("explode")) {
-        const radius = areaDist || feetIn(p.explode?.extension) || feetIn(description.match(/explode\s*\(([^)]*)\)/i)?.[1]) || 5;
-        return { kind: "explode", t: "circle", distance: radius };
+        const radius = areaDist || feetIn(p.explode?.extension) || feetIn(description.match(/explode\s*\(([^)]*)\)/i)?.[1]);
+        return radius ? { kind: "explode", t: "circle", distance: radius } : { kind: "explode", t: "circle", distance: 5, guessed: true };
     }
     if (on("blast")) {
         const d = (area.shape === "cone" && areaDist) || inc || areaDist;

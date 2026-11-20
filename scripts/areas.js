@@ -29,6 +29,35 @@ export function areaOf(item, { autoMode = false } = {}) {
     return areaSpec(item.system, { autoMode, description: itemDescription(item) });
 }
 
+/** sfrpg's compendium copy of an item with the same name (NPC grenades often carry no radius). */
+const twins = new Map();
+export async function compendiumTwin(item) {
+    const key = String(item?.name ?? "").trim().toLowerCase();
+    if (!key) return null;
+    if (twins.has(key)) return twins.get(key);
+    let sys = null;
+    try {
+        const pack = game.packs.get("sfrpg.equipment");
+        const index = await pack?.getIndex();
+        const entry = index?.find(e => String(e.name).trim().toLowerCase() === key);
+        if (entry) sys = (await pack.getDocument(entry._id))?.system ?? null;
+    } catch (err) {
+        console.warn(`${MODULE_ID} | compendium lookup failed`, err);
+    }
+    twins.set(key, sys);
+    return sys;
+}
+
+/** An explode weapon's area, filling a missing radius from the compendium copy (5 ft if none). */
+export async function explodeArea(item) {
+    const spec = areaOf(item);
+    if (!spec?.guessed) return spec;
+    const twin = await compendiumTwin(item);
+    const t = twin ? areaSpec(twin, {}) : null;
+    if (t?.kind === "explode" && !t.guessed) return { ...spec, distance: t.distance, guessed: false, fromCompendium: true };
+    return spec;
+}
+
 /* ---------- template <-> item ---------- */
 
 /**

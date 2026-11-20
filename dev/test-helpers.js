@@ -122,6 +122,7 @@ window.SCA_TEMPLATE = async (ownerName, itemStart, { col, row, vertex = true, t 
     const token = tok(ownerName);
     const item = token.actor.items.find(i => i.name.startsWith(itemStart));
     const spec = SFRPGCombatAutomation.logic.areaSpec(item.system, { description: item.system?.description?.value ?? "" }) ?? {};
+    if (spec.guessed && SFRPGCombatAutomation.explodeArea) Object.assign(spec, await SFRPGCombatAutomation.explodeArea(item));
     const d = canvas.dimensions;
     const s = canvas.grid.size;
     const data = {

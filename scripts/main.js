@@ -5,7 +5,7 @@ import { onAttackRolled, onDamageRolled, onPreCreateChatMessage, wrapRollDamage 
 import { processAttack, processSave } from "./apply.js";
 import { promptSave } from "./saves.js";
 import { onRenderChatMessage } from "./cards.js";
-import { wrapPlaceAbilityTemplate, onPreCreateTemplate, onCreateTemplate, onPreCreateRegion, onCreateRegion } from "./areas.js";
+import { wrapPlaceAbilityTemplate, onPreCreateTemplate, onCreateTemplate, onPreCreateRegion, onCreateRegion, explodeArea } from "./areas.js";
 import { bar } from "./options-bar.js";
 import * as rules from "./rules.js";
 import * as logic from "./logic.js";
@@ -60,7 +60,7 @@ function start() {
     bar.render();
     applyGmView();
 
-    const api = { bar, rules, logic, teardown, version: game.modules.get(MODULE_ID)?.version };
+    const api = { bar, rules, logic, explodeArea, teardown, version: game.modules.get(MODULE_ID)?.version };
     globalThis.SFRPGCombatAutomation = api;
     const mod = game.modules.get(MODULE_ID);
     if (mod) mod.api = api;
