@@ -65,10 +65,28 @@ export function onPreCreateTemplate(doc) {
     pending = null;
 }
 
-/** Hook: createMeasuredTemplate. On the creator's client: remember it, wake waiters, target tokens. */
-export async function onCreateTemplate(doc) {
-    const authorId = doc.author?.id ?? doc.user?.id ?? doc._source?.author;
+/**
+ * Foundry v14 stores a measured template as a Region (flag core.MeasuredTemplate, same id), so
+ * only the Region hooks fire. These pass template Regions on to the template handlers.
+ */
+const isTemplateRegion = (doc) => !!doc?.flags?.core?.MeasuredTemplate;
+export function onPreCreateRegion(doc) {
+    if (isTemplateRegion(doc)) onPreCreateTemplate(doc);
+}
+export function onCreateRegion(doc, options, userId) {
+    if (!isTemplateRegion(doc)) return;
+    const tpl = doc.parent?.templates?.get?.(doc.id) ?? doc;
+    return onCreateTemplate(tpl, options, userId);
+}
+
+const handled = new Set();
+
+/** Hook: createMeasuredTemplate (v13) or, through onCreateRegion, v14. On the creator's client: remember it, wake waiters, target tokens. */
+export async function onCreateTemplate(doc, options, userId) {
+    const authorId = userId ?? doc.author?.id ?? doc.user?.id;
     if (authorId !== game.user.id) return;
+    if (handled.has(doc.id)) return;
+    handled.add(doc.id);
     const flags = doc.flags?.[MODULE_ID];
     if (!flags?.itemUuid) return;
     lastTemplate.set(flags.itemUuid, { id: doc.id, sceneId: doc.parent?.id, at: Date.now() });
@@ -261,9 +279,28 @@ export async function scatter(doc, attackerToken) {
     const from = attackerToken?.center ?? aim;
     const step = scatterStep(aim, from, d8, d4);
     const s = canvas.grid.size;
-    const x = doc.x + step.di * s;
-    const y = doc.y + step.dj * s;
-    await doc.update({ x, y });
-    await new Promise(r => setTimeout(r, 150));
-    return { d8, d4, eighth: step.eighth, squares: d4, from: aim, to: { x, y } };
+    await moveTemplate(doc, step.di * s, step.dj * s);
+    await new Promise(r => setTimeout(r, 250));
+    const moved = doc.parent?.templates?.get?.(doc.id) ?? doc;
+    return { d8, d4, eighth: step.eighth, squares: d4, from: aim, to: { x: moved.x, y: moved.y } };
+}
+
+/**
+ * Move a template. In v14 the template is a Region, and updating the template's x and y doesn't
+ * move it, so the Region's shapes are shifted instead.
+ */
+export async function moveTemplate(doc, dx, dy) {
+    const region = doc.parent?.regions?.get?.(doc.id);
+    if (region && isTemplateRegion(region)) {
+        const shapes = region.toObject().shapes.map(sh => {
+            const out = { ...sh };
+            if (typeof out.x === "number") out.x += dx;
+            if (typeof out.y === "number") out.y += dy;
+            if (Array.isArray(out.points)) out.points = out.points.map((v, i) => v + (i % 2 ? dy : dx));
+            return out;
+        });
+        await region.update({ shapes });
+        return;
+    }
+    await doc.update({ x: doc.x + dx, y: doc.y + dy });
 }

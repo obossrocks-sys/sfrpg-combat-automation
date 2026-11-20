@@ -409,7 +409,10 @@ async function explodeFlow(ctx) {
         notes.push(`beyond maximum range (${range.maxRange} ft)`);
     }
     let scattered = null;
-    if (!hit) scattered = await scatter(doc, attackerToken);
+    if (!hit) {
+        scattered = await scatter(doc, attackerToken);
+        doc = doc.parent?.templates?.get?.(doc.id) ?? doc;
+    }
 
     // Who's in the burst: the targets you set from the card's template on a hit, else what's under it now.
     let tokens = (!placedNow && hit && ctx.targets.length) ? ctx.targets : await tokensInTemplate(doc);

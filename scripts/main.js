@@ -5,7 +5,7 @@ import { onAttackRolled, onDamageRolled, onPreCreateChatMessage, wrapRollDamage 
 import { processAttack, processSave } from "./apply.js";
 import { promptSave } from "./saves.js";
 import { onRenderChatMessage } from "./cards.js";
-import { wrapPlaceAbilityTemplate, onPreCreateTemplate, onCreateTemplate } from "./areas.js";
+import { wrapPlaceAbilityTemplate, onPreCreateTemplate, onCreateTemplate, onPreCreateRegion, onCreateRegion } from "./areas.js";
 import { bar } from "./options-bar.js";
 import * as rules from "./rules.js";
 import * as logic from "./logic.js";
@@ -45,6 +45,9 @@ function start() {
     on("renderChatMessageHTML", onRenderChatMessage);
     on("preCreateMeasuredTemplate", onPreCreateTemplate);
     on("createMeasuredTemplate", onCreateTemplate);
+    // Foundry v14 creates templates as Regions.
+    on("preCreateRegion", onPreCreateRegion);
+    on("createRegion", onCreateRegion);
     on("updateCombat", (combat, changed) => {
         if ("turn" in changed || "round" in changed) bar.onTurnChange();
     });
