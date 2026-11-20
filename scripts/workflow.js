@@ -158,8 +158,16 @@ export async function rollDamageSections(item, isCrit, { partIndex = null } = {}
 /* ---------- chat messages: sfrpg's hit tag and DCs ---------- */
 
 function npcOnly(actorId) {
+    if (!actorId) return false;
     const actor = game.actors.get(actorId);
-    return actor ? !actor.hasPlayerOwner : true;
+    return actor ? !actor.hasPlayerOwner : false;
+}
+
+/** sfrpg item cards and rolls only; never someone's typed chat. */
+function isSystemCard(data, message, content) {
+    if (data.flags?.sfrpg ?? message.flags?.sfrpg) return true;
+    if ((data.rolls ?? message.rolls)?.length) return true;
+    return /class="[^"]*chat-card/.test(content ?? "");
 }
 
 function stripHitTag(root) {
@@ -221,7 +229,7 @@ export function onPreCreateChatMessage(message, data) {
             }
         }
 
-        if (getSetting("hideDCs") && npcOnly(actorId) && !message.flags?.[MODULE_ID]) {
+        if (getSetting("hideDCs") && npcOnly(actorId) && !message.flags?.[MODULE_ID] && isSystemCard(data, message, content)) {
             if (content && /\bDC\s*\d+|data-dc=/i.test(content) && parse() && stripDCsFrom(root)) update.content = root.innerHTML;
             if (flavor && /\bDC\s*\d+/i.test(flavor)) update.flavor = stripDCs(flavor);
         }
@@ -335,6 +343,7 @@ export async function onAttackRolled({ actor, item, roll, rollMetadata }) {
 
 async function attackFlowLayer1(ctx) {
     const { actor, item, roll, targets, attackerToken, cover, optionsUsed, nonlethal } = ctx;
+    if (!targets.length) return;
     const results = targets.map(t => resolveTarget({ item, roll, attackerToken, targetToken: t, cover }));
     if (getSetting("clearTargets")) clearTargets();
 
