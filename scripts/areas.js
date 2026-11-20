@@ -31,23 +31,35 @@ export function areaOf(item, { autoMode = false } = {}) {
 
 /* ---------- template <-> item ---------- */
 
-/** Wrapper for ItemSFRPG.prototype.placeAbilityTemplate (installed in main.js). */
+/**
+ * Wrapper for ItemSFRPG.prototype.placeAbilityTemplate (installed in main.js). The item is
+ * remembered for as long as the preview is open, however long the player takes, and for a few
+ * seconds after it's placed (sfrpg creates the template without awaiting it).
+ */
 export function wrapPlaceAbilityTemplate(original) {
     return async function (...args) {
-        pending = { itemUuid: this.uuid, actorUuid: this.actor?.uuid ?? null, at: Date.now() };
+        pending = { itemUuid: this.uuid, actorUuid: this.actor?.uuid ?? null, placedAt: null };
+        const mine = pending;
         let placed = false;
         try {
             placed = await original.apply(this, args);
             return placed;
         } finally {
-            if (!placed) pending = null;
+            if (pending === mine) {
+                if (placed) pending.placedAt = Date.now();
+                else pending = null;
+            }
         }
     };
 }
 
 /** Hook: preCreateMeasuredTemplate (creator's client). Stamp a card-placed template with its item. */
 export function onPreCreateTemplate(doc) {
-    if (!pending || Date.now() - pending.at > 120000) return;
+    if (!pending) return;
+    if (pending.placedAt && Date.now() - pending.placedAt > 10000) {
+        pending = null;
+        return;
+    }
     if (doc.flags?.[MODULE_ID]?.itemUuid) return;
     doc.updateSource({ [`flags.${MODULE_ID}`]: { itemUuid: pending.itemUuid, actorUuid: pending.actorUuid } });
     pending = null;
