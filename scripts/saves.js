@@ -5,7 +5,7 @@
 import { MODULE_ID } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { executeAsUser } from "./socket.js";
-import { SAVE_LABEL } from "./logic.js";
+import { SAVE_LABEL, mindImmune } from "./logic.js";
 import { hasCondition, naturalD20 } from "./rules.js";
 
 const esc = (s) => foundry.utils.escapeHTML(String(s ?? ""));
@@ -63,6 +63,19 @@ export function evasionOf(actor) {
         if (armor) return { level: null, lost: armor.name, had: level };
     }
     return { level, lost: null };
+}
+
+/** Is the item mind-affecting (sfrpg's descriptor)? */
+export function isMindAffecting(item) {
+    const d = item?.system?.descriptors ?? {};
+    return !!(d["mind-affecting"] || d.mindAffecting);
+}
+
+/** Is the creature immune to mind-affecting effects (undead, constructs, or its condition immunities)? */
+export function immuneToMind(actor) {
+    const s = actor?.system ?? {};
+    const ci = s.traits?.ci ?? {};
+    return mindImmune({ type: s.details?.type ?? "", ci: Array.isArray(ci.value) ? ci.value : [], ciCustom: ci.custom ?? "" });
 }
 
 /** A creature's spell resistance (NPCs keep it in traits.sr, PCs and drones in traits.spellResistance). */

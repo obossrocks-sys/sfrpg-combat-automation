@@ -14,8 +14,8 @@ import { getSetting } from "./settings.js";
 import { resolveTarget, naturalD20, pickAcKey, saveRangeWarning, hasFarShot } from "./rules.js";
 import { executeAsGM, gmConnected } from "./socket.js";
 import { bar } from "./options-bar.js";
-import { SAVE_LABEL, saveEffect, rangePenaltyFor, stripDCs } from "./logic.js";
-import { itemSaveDC, itemSaveType } from "./saves.js";
+import { SAVE_LABEL, saveEffect, rangePenaltyFor, stripDCs, isAbilityDamagePart, isHealingPart, partName } from "./logic.js";
+import { itemSaveDC, itemSaveType, isMindAffecting } from "./saves.js";
 import { areaOf, explodeArea, freshTemplate, consumeTemplate, placeTemplate, tokensInTemplate, distanceToPoint, nearestToPoint, sortByDistance, scatter } from "./areas.js";
 
 /** Damage rolls waiting to be linked to their workflow, keyed by workflow id. */
@@ -268,7 +268,8 @@ function itemData(item) {
     return {
         uuid: item.uuid, name: item.name, img: item.img, type: item.type, hasDamage: !!item.hasDamage,
         publicName: hide ? stripDCs(item.name).trim() : item.name,
-        allowsSR: item.type === "spell" && !!item.system?.sr
+        allowsSR: item.type === "spell" && !!item.system?.sr,
+        mindAffecting: isMindAffecting(item)
     };
 }
 
@@ -395,6 +396,8 @@ async function attackFlowLayer1(ctx) {
 
 async function explodeFlow(ctx) {
     const { actor, item, roll, attackerToken, cover, optionsUsed, nonlethal } = ctx;
+    // A grenade with no save and no damage (smoke): place it and show who's inside; nobody saves.
+    const effectless = !item.hasDamage && !item.hasSave;
     const spec = await explodeArea(item);
     let doc = freshTemplate(item);
     const placedNow = !doc;
@@ -446,8 +449,11 @@ async function explodeFlow(ctx) {
     const dc = base + parts.reduce((s, p) => s + p.value, 0);
     const type = itemSaveType(item, { explode: true });
     const eff2 = saveEffect(item.system.save?.descriptor, { explode: true });
+    const save = effectless
+        ? { type: null, label: "", dc: null, base: null, parts: [], onSave: "full", flagged: false, note: "", noEffect: true }
+        : { type, label: SAVE_LABEL[type], dc, base, parts, onSave: eff2.onSave, flagged: false, note: "" };
 
-    const targets = tokens.map(t => ({ ...targetData(t), critTarget: t === critToken }));
+    const targets = tokens.map(t => ({ ...targetData(t), critTarget: !effectless && t === critToken }));
     await send("processSave", {
         workflowId: foundry.utils.randomID(),
         kind: KIND.EXPLODE,
@@ -457,7 +463,7 @@ async function explodeFlow(ctx) {
         item: itemData(item),
         attack: { total: roll.total, nat, eff, penalty: range?.penalty ?? 0, distance, hit, notes },
         scatter: scattered,
-        save: { type, label: SAVE_LABEL[type], dc, base, parts, onSave: eff2.onSave, flagged: false, note: "" },
+        save,
         cover, options: optionsUsed, nonlethal,
         properties: damageProperties(item),
         targets, damage
@@ -536,11 +542,37 @@ function damageFlow(item) {
     if (!getSetting("enabled")) return null;
     if (!isHandledItem(item?.actor, item)) return null;
     if (!item.hasDamage || item.system?.actionType === "heal") return null;
+    // Healing (a "healing" damage part, such as blessing of youth) is left to sfrpg.
+    if ((item.system?.damage?.parts ?? []).some(isHealingPart)) return null;
     const p = item.system?.properties ?? {};
     if (["explode", "blast", "line"].some(k => p[k]?.value)) return null; // their attack drives them
     if (item.hasSave && getSetting("automateSaves") && (!item.hasAttack || areaOf(item))) return KIND.SAVE;
     if (!item.hasSave && !item.hasAttack && getSetting("damageOnly")) return KIND.DAMAGE;
     return null;
+}
+
+/**
+ * Save and damage-only effects with several damage parts: sfrpg's quick roll rolls every part, but
+ * many effects mean one of them (injury echo's damage type, fuel for the fires' single or area
+ * bonus) or split them (magic missile's missiles). Ask the roller which to roll.
+ * Returns { idx, label }: the part indexes to roll and a label for the cards (null for all).
+ */
+async function chooseParts(item, idx) {
+    const parts = item.system?.damage?.parts ?? [];
+    const DialogV2 = foundry.applications.api.DialogV2;
+    const pick = await DialogV2.wait({
+        window: { title: `${item.name}: which damage?` },
+        position: { width: 360 },
+        content: `<p>This has ${idx.length} damage parts. Roll all of them, or just one (a chosen damage type, a single or area bonus, or one missile for this target).</p>`,
+        buttons: [
+            { action: "all", label: `All ${idx.length}`, default: true },
+            ...idx.map(i => ({ action: String(i), label: partName(parts[i], i) }))
+        ],
+        rejectClose: false
+    });
+    if (pick == null || pick === "all") return { idx, label: null };
+    const i = Number(pick);
+    return { idx: [i], label: partName(parts[i], i) };
 }
 
 /** Wrapper for ItemSFRPG.prototype.rollDamage (installed in main.js). */
@@ -561,23 +593,50 @@ export function wrapRollDamage(original) {
             return original.call(this, eventArg, options);
         }
 
+        // Which damage parts take Stamina and HP: ability damage is shown for the GM to apply by hand.
+        const parts = item.system?.damage?.parts ?? [];
+        const manualIdx = parts.map((p, i) => (isAbilityDamagePart(p) ? i : -1)).filter(i => i >= 0);
+        let useIdx = parts.map((_, i) => i).filter(i => !manualIdx.includes(i));
+        if (!useIdx.length) return original.call(this, eventArg, options);
+
         // Capture synchronously.
         const actor = item.actor;
         const attackerToken = findAttackerToken(actor);
         const cover = bar.consumeCover();
+        let mode = null;
+        if (useIdx.length > 1) {
+            const pick = await chooseParts(item, useIdx);
+            useIdx = pick.idx;
+            if (pick.label) mode = { label: pick.label };
+        }
         const workflowId = foundry.utils.randomID();
         pendingDamage.set(workflowId, { normal: [], crit: [] });
         let result, sections;
         try {
-            result = await original.call(this, eventArg, {
-                ...options,
-                rollMetadata: { ...(options?.rollMetadata ?? {}), scaWorkflowId: workflowId, scaCrit: false }
-            });
+            // Roll the chosen parts, then the ability-damage parts. sfrpg copies the parts before
+            // its first await, so they're swapped just for the call; each part is its own roll, in order.
+            const order = [...useIdx, ...manualIdx];
+            const swap = order.length !== parts.length || order.some((v, k) => v !== k);
+            const saved = item.system.damage.parts;
+            if (swap) item.system.damage.parts = order.map((i, k) => ({ ...parts[i], isPrimarySection: k === 0 }));
+            let rolling;
+            try {
+                rolling = original.call(this, eventArg, {
+                    ...options,
+                    rollMetadata: { ...(options?.rollMetadata ?? {}), scaWorkflowId: workflowId, scaCrit: false }
+                });
+            } finally {
+                if (swap) item.system.damage.parts = saved;
+            }
+            result = await rolling;
             sections = pendingDamage.get(workflowId)?.normal ?? [];
         } finally {
             pendingDamage.delete(workflowId);
         }
         if (!sections?.length) return result; // the roll was cancelled
+        const manualParts = sections.slice(useIdx.length).map((s, k) => ({ label: parts[manualIdx[k]]?.name || "Ability damage", total: s.total }));
+        sections = sections.slice(0, useIdx.length);
+        if (!sections.length) return result;
         if (getSetting("clearTargets")) clearTargets();
         consumeTemplate(item);
 
@@ -606,7 +665,8 @@ export function wrapRollDamage(original) {
             nonlethal: !!item.system?.properties?.nonlethal?.value,
             properties: damageProperties(item),
             targets: out,
-            damage: { normal: sections, crit: [] }
+            damage: { normal: sections, crit: [] },
+            mode, manualParts
         });
         return result;
     };

@@ -48,6 +48,12 @@ body.sca-hide-public .chat-message.sca-public-msg { display: none; }
 }
 #sca-bar button.on { background: #b8860b; color: #111; border-color: #d4a017; font-weight: bold; }
 #sca-bar button:hover { border-color: #aaa; }
+/* v0.2.1: hide or show the bar */
+#sca-bar button.sca-collapse { padding: 0 5px; background: transparent; border-color: transparent; color: #999; }
+#sca-bar button.sca-collapse:hover { color: #eee; border-color: #555; }
+#sca-bar button.sca-collapse i { margin: 0; font-size: 11px; }
+#sca-bar.sca-collapsed { opacity: 0.85; }
+#sca-bar .sca-on { color: #d4a017; font-weight: bold; margin: 0 4px; }
 
 /* Layer 2: saves and areas */
 .sca-card .sca-saved { border-left-color: #3a6fb0; }

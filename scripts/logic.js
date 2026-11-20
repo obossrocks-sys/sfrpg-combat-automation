@@ -127,6 +127,37 @@ export function areaSpec(sys, { autoMode = false, description = "" } = {}) {
     return null;
 }
 
+/**
+ * A damage part that is really ability damage ("Strength damage", "Dexterity drain"): untyped and
+ * named for an ability score. It isn't taken off Stamina or HP; the GM card shows it to apply by hand.
+ */
+export function isAbilityDamagePart(part) {
+    const typed = Object.values(part?.types ?? {}).some(Boolean);
+    if (typed) return false;
+    return /\b(strength|dexterity|constitution|intelligence|wisdom|charisma)\b.*\b(damage|drain)\b/i.test(String(part?.name ?? ""));
+}
+
+/** A damage part that heals (sfrpg's "healing" type). The module leaves healing to sfrpg. */
+export const isHealingPart = (part) => !!part?.types?.healing;
+
+/** How a damage part is named in the module's "which damage?" prompt. */
+export function partName(part, i) {
+    if (part?.name) return String(part.name);
+    const types = Object.entries(part?.types ?? {}).filter(([, on]) => on).map(([k]) => k).join(" & ");
+    const formula = String(part?.formula ?? "");
+    return [types, formula.length <= 24 ? formula : ""].filter(Boolean).join(" ") || `Part ${i + 1}`;
+}
+
+/**
+ * Immune to mind-affecting effects: undead and constructs (CRB), or a creature whose condition
+ * immunities name them ("Undead Immunities", "Construct Immunities", "mind-affecting").
+ */
+export function mindImmune({ type = "", ci = [], ciCustom = "" } = {}) {
+    if (/\b(undead|construct)\b/i.test(String(type))) return true;
+    if ((ci ?? []).some(c => /mind/i.test(String(c)))) return true;
+    return /undead immunit|construct immunit|mind-affecting/i.test(String(ciCustom ?? ""));
+}
+
 /** Remove save DCs from text players can see ("Save DC 15 Reflex half", "Crush Skull (DC 25)"). */
 export function stripDCs(text) {
     return String(text ?? "")

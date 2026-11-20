@@ -8,7 +8,7 @@ import { getSetting } from "./settings.js";
 import { createCards, updateCards } from "./cards.js";
 import { rollDamageSections } from "./workflow.js";
 import { saveSucceeds, damageFactor, scaled } from "./logic.js";
-import { rollSaveFor, evasionOf, spellResistanceOf, rollSpellResistance } from "./saves.js";
+import { rollSaveFor, evasionOf, spellResistanceOf, rollSpellResistance, immuneToMind } from "./saves.js";
 
 const PC_TYPES = ["character"];
 const NPC_TYPES = ["npc", "npc2"];
@@ -256,6 +256,13 @@ function enqueue(id, fn) {
 /** Roll a save for one target and work out its share of the damage. Fills t.save, t.result, t.factor. */
 async function resolveSave(wf, t, actor) {
     const s = wf.save;
+    if (s.noEffect) {
+        // No save and no damage (smoke): the card just lists who's in the area.
+        t.result = RESULT.AREA;
+        t.factor = 0;
+        t.save = { none: true };
+        return;
+    }
     if (s.noSave) {
         t.result = RESULT.FAILED;
         t.factor = 1;
@@ -325,6 +332,11 @@ async function runSaves(wf, gmMessage) {
             t.result = RESULT.BLOCKED;
             t.factor = 0;
             t.note = "total cover";
+        } else if (wf.item.mindAffecting && immuneToMind(actor)) {
+            // Undead and constructs (CRB): the GM card's Roll save button overrides.
+            t.result = RESULT.BLOCKED;
+            t.factor = 0;
+            t.note = "immune to mind-affecting effects";
         } else {
             const sr = wf.item.allowsSR && getSetting("spellResistance") ? spellResistanceOf(actor) : 0;
             if (sr > 0) {
@@ -456,6 +468,7 @@ export async function gmAction(message, action, index, value) {
             setOutcome(wf, t, t.result !== RESULT.SAVED);
         } else if (t.result === RESULT.RESISTED || t.result === RESULT.BLOCKED) {
             const { actor } = await targetActor(t);
+            t.note = null;
             if (actor) await resolveSave(wf, t, actor);
         }
         t.flipped = !t.flipped;

@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import {
     saveSucceeds, saveEffect, damageFactor, scaled, rangePenaltyFor, scatterStep, compass,
-    feetIn, areaSpec, stripDCs
+    feetIn, areaSpec, stripDCs, isAbilityDamagePart, isHealingPart, partName, mindImmune
 } from "../scripts/logic.js";
 
 let passed = 0;
@@ -139,5 +139,22 @@ test("no area", () => assert.equal(areaSpec({ area: { shape: "", value: "" } }),
 test("strip button text", () => assert.equal(stripDCs("Save DC 15 Reflex half"), "Save Reflex half"));
 test("strip item name", () => assert.equal(stripDCs("Crush Skull (DC 25)"), "Crush Skull"));
 test("leave other text", () => assert.equal(stripDCs("Reflex half"), "Reflex half"));
+
+// v0.2.1: damage parts and immunities
+const T = (t) => ({ acid: false, fire: false, bludgeoning: false, healing: false, ...t });
+test("Strength damage part", () => assert.equal(isAbilityDamagePart({ name: "Strength damage", types: T({}) }), true));
+test("Dexterity drain part", () => assert.equal(isAbilityDamagePart({ name: "Dexterity drain", types: {} }), true));
+test("plain Damage part isn't ability damage", () => assert.equal(isAbilityDamagePart({ name: "Damage", types: {} }), false));
+test("typed part named for an ability isn't", () => assert.equal(isAbilityDamagePart({ name: "Strength damage", types: T({ fire: true }) }), false));
+test("healing part", () => assert.equal(isHealingPart({ types: T({ healing: true }) }), true));
+test("fire part isn't healing", () => assert.equal(isHealingPart({ types: T({ fire: true }) }), false));
+test("part name from name", () => assert.equal(partName({ name: "Piercing", formula: "1d6" }, 1), "Piercing"));
+test("part name from types and formula", () => assert.equal(partName({ name: "", formula: "1d4+1", types: T({ fire: true }) }, 0), "fire 1d4+1"));
+test("part name, untyped", () => assert.equal(partName({ name: "", formula: "1d4+1", types: T({}) }, 2), "1d4+1"));
+test("part name, long formula", () => assert.equal(partName({ name: "", formula: "lookupRange(@item.level, 2, 2, 4, 3)d10", types: T({}) }, 0), "Part 1"));
+test("undead are mind-immune", () => assert.equal(mindImmune({ type: "Undead" }), true));
+test("constructs are mind-immune", () => assert.equal(mindImmune({ type: "Construct (technological)" }), true));
+test("immunity text", () => assert.equal(mindImmune({ type: "", ciCustom: "Undead Immunities" }), true));
+test("humanoid isn't", () => assert.equal(mindImmune({ type: "Humanoid (goblinoid)", ciCustom: "" }), false));
 
 console.log(`${passed} passed${process.exitCode ? ", some failed" : ""}`);

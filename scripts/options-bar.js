@@ -16,7 +16,7 @@ function globalMod(opt) {
 class AttackBar {
     constructor() {
         this.el = null;
-        this.state = { options: {}, cover: "none", auto: false };
+        this.state = { options: {}, cover: "none", auto: false, collapsed: false };
         /** Modal weapons: the mode picked for each item this session (itemUuid -> part index). */
         this.modes = new Map();
     }
@@ -24,12 +24,20 @@ class AttackBar {
     load() {
         const saved = foundry.utils.deepClone(game.settings.get(MODULE_ID, "barState") ?? {});
         this.state.options = saved.options ?? {};
+        this.state.collapsed = !!saved.collapsed;
         this.state.cover = "none";
         for (const k of Object.keys(ATTACK_OPTIONS)) this.#sync(k);
     }
 
     save() {
-        game.settings.set(MODULE_ID, "barState", { options: this.state.options });
+        game.settings.set(MODULE_ID, "barState", { options: this.state.options, collapsed: this.state.collapsed });
+    }
+
+    /** Hide the bar down to a small tab, or show it again (this user only; options stay as they are). */
+    toggleCollapsed() {
+        this.state.collapsed = !this.state.collapsed;
+        this.save();
+        this.render();
     }
 
     #sync(k) {
@@ -116,6 +124,19 @@ class AttackBar {
             if (hotbar && hotbar.parentElement === anchor) anchor.insertBefore(this.el, hotbar);
             else anchor.appendChild(this.el);
         }
+        const collapsed = !!this.state.collapsed;
+        this.el.classList.toggle("sca-collapsed", collapsed);
+        const toggle = `<button type="button" class="sca-collapse" data-sca-collapse="1" data-tooltip="${collapsed ? "Show" : "Hide"} the attack-options bar"><i class="fa-solid fa-chevron-${collapsed ? "right" : "left"}"></i></button>`;
+        if (collapsed) {
+            // Keep anything that's switched on in view, so a hidden bar never hides a penalty.
+            const on = [
+                ...Object.entries(ATTACK_OPTIONS).filter(([k]) => this.isOn(k)).map(([, o]) => o.short),
+                ...(this.state.auto ? ["Auto"] : []),
+                ...(this.state.cover !== "none" ? [`${COVER[this.state.cover]?.short} cover`] : [])
+            ];
+            this.el.innerHTML = `${toggle}<span class="sca-label">Attack</span>${on.length ? `<span class="sca-on">${on.join(" · ")}</span>` : ""}`;
+            return;
+        }
         const opt = Object.entries(ATTACK_OPTIONS).map(([k, o]) =>
             `<button type="button" data-sca-opt="${k}" class="${this.isOn(k) ? "on" : ""}" data-tooltip="${o.label}: ${o.hint}">${o.short}</button>`
         ).join("");
@@ -127,13 +148,14 @@ class AttackBar {
             : "";
         const mode = `<button type="button" data-sca-mode="1" data-tooltip="Modal weapons: pick the mode again on the next attack">Mode</button>`;
         const auto = `<button type="button" data-sca-auto="1" class="${this.state.auto ? "on" : ""}" data-tooltip="Automatic mode, next attack only: an automatic weapon fires at every creature in a cone of half its range increment, a d20 each at -4, no crits">Auto</button>`;
-        this.el.innerHTML = `<span class="sca-label">Attack</span>${opt}${auto}${mode}<span class="sca-sep"></span><span class="sca-label">Cover</span>${cov}${gm}`;
+        this.el.innerHTML = `${toggle}<span class="sca-label">Attack</span>${opt}${auto}${mode}<span class="sca-sep"></span><span class="sca-label">Cover</span>${cov}${gm}`;
     }
 
     async #onClick(ev) {
         const b = ev.target.closest("button");
         if (!b) return;
-        if (b.dataset.scaOpt) this.toggle(b.dataset.scaOpt);
+        if (b.dataset.scaCollapse) this.toggleCollapsed();
+        else if (b.dataset.scaOpt) this.toggle(b.dataset.scaOpt);
         else if (b.dataset.scaCover) this.setCover(b.dataset.scaCover);
         else if (b.dataset.scaAuto) this.toggleAuto();
         else if (b.dataset.scaMode) this.clearModes();

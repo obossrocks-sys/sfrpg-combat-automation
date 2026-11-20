@@ -39,7 +39,9 @@ export const RESULT = {
     SAVED: "saved",
     RESISTED: "resisted",
     PENDING: "pending",
-    STRUCK: "struck"
+    STRUCK: "struck",
+    // v0.2.1: in an area with no save and no damage (a smoke grenade's cloud)
+    AREA: "area"
 };
 
 export const RESULT_LABEL = {
@@ -52,7 +54,8 @@ export const RESULT_LABEL = {
     saved: "Saved",
     resisted: "Resisted",
     pending: "Rolling…",
-    struck: "Hit"
+    struck: "Hit",
+    area: "In the area"
 };
 
 /** Workflow kinds. "attack" is layer 1; the rest are layer 2. */

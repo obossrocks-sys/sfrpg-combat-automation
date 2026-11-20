@@ -21,6 +21,7 @@ function resultClass(r) {
         case RESULT.FAILED: return "hit";
         case RESULT.SAVED: return "saved";
         case RESULT.MANUAL:
+        case RESULT.AREA:
         case RESULT.PENDING: return "manual";
         default: return "miss";
     }
@@ -68,7 +69,7 @@ function publicRow(t, wf) {
     if (t.riderPending) extra += `<span class="sca-status">Save: rolling…</span>`;
     let dmg = "";
     if (ap && !undone) dmg = `<span class="sca-dmg">${ap.dealt} damage</span>`;
-    else if (!undone && isSaveKind(wf) && t.result !== RESULT.PENDING && (t.factor ?? 0) === 0) dmg = `<span class="sca-dmg">no damage</span>`;
+    else if (!undone && isSaveKind(wf) && !wf.save?.noEffect && t.result !== RESULT.PENDING && (t.factor ?? 0) === 0) dmg = `<span class="sca-dmg">no damage</span>`;
     const status = ap?.status && !undone ? `<span class="sca-status">${esc(ap.status)}</span>` : "";
     return `<li class="sca-row sca-${resultClass(t.result)}">
         <img src="${esc(t.img)}" alt="">
@@ -248,13 +249,20 @@ function gmSummary(wf) {
         if (wf.kind === KIND.LINE) lines.push(`<span class="sca-notes">One roll against each creature in the line, nearest first; only the first can be crit</span>`);
         if (wf.rider) lines.push(`${esc(wf.rider.label)} DC ${wf.rider.dc} on a hit (${esc(wf.rider.descriptor || "save")})`);
     }
-    if (isSaveKind(wf) && wf.save) {
+    if (isSaveKind(wf) && wf.save?.noEffect) {
+        lines.push(`No save and no damage: the rows show who's in the area`);
+    } else if (isSaveKind(wf) && wf.save) {
         const parts = (wf.save.parts ?? []).map(p => `${signed(p.value)} ${p.label}`);
         const base = parts.length ? `${wf.save.base} ${parts.join(" ")} = ` : "";
         const half = wf.save.onSave === "half" ? "half" : wf.save.onSave === "none" ? "negates" : "no effect on damage";
         lines.push(`${esc(wf.save.label)} DC ${esc(base)}<b>${wf.save.dc}</b> (${half})${wf.item.allowsSR ? " · SR applies" : ""}`);
     } else if (wf.kind === KIND.DAMAGE) {
         lines.push(`No attack and no save: full damage to each target`);
+        if (wf.targets.length > 1) lines.push(`<span class="sca-warn">Each of the ${wf.targets.length} targets took the whole roll. For an effect that splits (magic missile), Undo and roll one part per target.</span>`);
+    }
+    if (wf.manualParts?.length) {
+        const list = wf.manualParts.map(p => `${esc(p.label)} ${esc(p.total)}`).join(" · ");
+        lines.push(`<span class="sca-warn">Apply by hand (not taken off SP or HP): ${list}</span>`);
     }
     return lines.map(l => `<div class="sca-line">${l}</div>`).join("");
 }
