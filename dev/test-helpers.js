@@ -52,10 +52,10 @@ window.SCA_ATTACK = async (attacker, itemStart, targets, opts = {}) => {
     return text(gm?.content).replace(/Make (miss|hit)|Undo$/g, "").replace(/[=&?<>]/g, "_");
 };
 
-/** Click a button on the newest GM card (action: undo, redo, flip, apply). */
-window.SCA_CLICK = async (action, index = null) => {
+/** Click a button on the newest GM card (action: undo, redo, flip, apply, flipsave, share with value full/half/none). */
+window.SCA_CLICK = async (action, index = null, value = null) => {
     const msg = game.messages.contents.filter(m => m.flags?.["sfrpg-combat-automation"]?.gm).pop();
-    const sel = `[data-sca-action="${action}"]` + (index != null ? `[data-sca-index="${index}"]` : "");
+    const sel = `[data-sca-action="${action}"]` + (index != null ? `[data-sca-index="${index}"]` : "") + (value ? `[data-sca-value="${value}"]` : "");
     const btn = document.querySelector(`#chat [data-message-id="${msg.id}"] ${sel}`)
         ?? document.querySelector(`[data-message-id="${msg.id}"] ${sel}`);
     if (!btn) return "no button";
@@ -102,3 +102,88 @@ window.SCA_CLEAN_CHAT = async () => {
     await ChatMessage.deleteDocuments(del);
     return del.length;
 };
+
+/* ---------- layer 2 ---------- */
+
+const MOD = "sfrpg-combat-automation";
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const gmCardText = () => {
+    const gm = game.messages.contents.filter(m => m.flags?.[MOD]?.gm).pop();
+    return text(gm?.content).replace(/Make (miss|hit|saved|failed)|Undo$/g, "").replace(/[=&?<>]/g, "_");
+};
+window.SCA_GM_CARD = gmCardText;
+
+/**
+ * Place an item's template as if from its card (flagged with the item, so the module targets what's
+ * inside and the next roll uses it). col/row are scene squares; vertex true puts it on the square's
+ * top-left corner (an intersection), false on its center. Shape and size come from the item unless given.
+ */
+window.SCA_TEMPLATE = async (ownerName, itemStart, { col, row, vertex = true, t = null, distance = null, direction = 0 } = {}) => {
+    const token = tok(ownerName);
+    const item = token.actor.items.find(i => i.name.startsWith(itemStart));
+    const spec = SFRPGCombatAutomation.logic.areaSpec(item.system, { description: item.system?.description?.value ?? "" }) ?? {};
+    const d = canvas.dimensions;
+    const s = canvas.grid.size;
+    const data = {
+        t: t ?? spec.t ?? "circle",
+        distance: distance ?? spec.distance ?? 10,
+        direction,
+        x: d.sceneX + col * s + (vertex ? 0 : s / 2),
+        y: d.sceneY + row * s + (vertex ? 0 : s / 2),
+        user: game.user.id,
+        fillColor: game.user.color?.css ?? "#ff0000",
+        flags: { [MOD]: { itemUuid: item.uuid, actorUuid: item.actor.uuid } }
+    };
+    if (data.t === "cone") data.angle = 90;
+    if (data.t === "ray") data.width = d.distance;
+    const [doc] = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [data]);
+    await sleep(800);
+    return `${doc.id} ${data.t} ${data.distance}ft: targets ${[...game.user.targets].map(x => x.name).join(", ") || "none"}`;
+};
+
+/** Delete every template on the scene. */
+window.SCA_CLEAR_TEMPLATES = async () => {
+    const ids = canvas.scene.templates.map(t => t.id);
+    await canvas.scene.deleteEmbeddedDocuments("MeasuredTemplate", ids);
+    return ids.length;
+};
+
+/** Roll damage for a save or damage-only item (as the card's Damage button does). Targets: names, or keep the template's. */
+window.SCA_CAST = async (caster, itemStart, targets = null, opts = {}) => {
+    canvas.tokens.releaseAll();
+    tok(caster).control({ releaseOthers: true });
+    if (targets) canvas.tokens.setTargets(targets.map(n => tok(n).id), { mode: "replace" });
+    const item = tok(caster).actor.items.find(i => i.name.startsWith(itemStart));
+    if (opts.seq) SCA_FORCE(opts.seq);
+    try {
+        await item.rollDamage({ event: { shiftKey: false } }, { skipUI: true });
+    } finally {
+        if (!opts.keepForce) SCA_UNFORCE();
+    }
+    await sleep(opts.wait ?? 3000);
+    return gmCardText();
+};
+
+/** Attack with an area weapon (grenade, blast, line). Place its template first with SCA_TEMPLATE. */
+window.SCA_THROW = async (attacker, itemStart, opts = {}) => {
+    canvas.tokens.releaseAll();
+    tok(attacker).control({ releaseOthers: true });
+    const item = tok(attacker).actor.items.find(i => i.name.startsWith(itemStart));
+    if (opts.auto) SFRPGCombatAutomation.bar.toggleAuto();
+    if (opts.seq) SCA_FORCE(opts.seq);
+    try {
+        await item.rollAttack({ event: { ctrlKey: true } });
+        await sleep(opts.wait ?? 3500);
+    } finally {
+        SCA_UNFORCE();
+    }
+    return gmCardText();
+};
+
+/** Item summary for planning tests: saves, areas and properties of an actor's items. */
+window.SCA_ITEMS = (name) => tok(name).actor.items.filter(i => i.hasDamage || i.hasSave).map(i => {
+    const p = Object.entries(i.system?.properties ?? {}).filter(([, v]) => v?.value).map(([k]) => k).join("/");
+    const sv = i.system?.save?.type ? `${i.system.save.type}:${i.system.save.descriptor}:${i.labels?.dcValue}` : "";
+    const ar = i.system?.area?.shape ? `${i.system.area.shape}${i.system.area.value}` : "";
+    return `${i.name} [${i.type} ${i.system?.actionType ?? ""} ${p} ${sv} ${ar}]`;
+}).join(" | ").replace(/[=&?<>]/g, "_");

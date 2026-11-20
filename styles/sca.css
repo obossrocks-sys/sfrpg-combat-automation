@@ -48,3 +48,10 @@ body.sca-hide-public .chat-message.sca-public-msg { display: none; }
 }
 #sca-bar button.on { background: #b8860b; color: #111; border-color: #d4a017; font-weight: bold; }
 #sca-bar button:hover { border-color: #aaa; }
+
+/* Layer 2: saves and areas */
+.sca-card .sca-saved { border-left-color: #3a6fb0; }
+.sca-card .sca-saved .sca-res { color: #3a6fb0; }
+.sca-card .sca-share { display: flex; gap: 4px; }
+.sca-card .sca-row .sca-status { margin-left: 2px; }
+.sca-save-prompt .sca-hint { font-size: 0.85em; opacity: 0.75; }

@@ -1,19 +1,29 @@
 /**
- * Two messages per attack: a public card (hit, miss or crit and the damage dealt) and a
- * GM-only whisper with the numbers and the buttons. Players never receive the whisper,
- * so the numbers can't be read with Inspect Element.
+ * Two messages per workflow: a public card (hit, miss or crit, or saved or failed, and the damage
+ * dealt) and a GM-only whisper with the numbers and the buttons. Players never receive the
+ * whisper, so ACs and DCs can't be read with Inspect Element.
  */
-import { MODULE_ID, RESULT, RESULT_LABEL, ATTACK_OPTIONS, COVER } from "./constants.js";
+import { MODULE_ID, RESULT, RESULT_LABEL, ATTACK_OPTIONS, COVER, KIND } from "./constants.js";
 import { AC_LABEL } from "./rules.js";
 import { gmAction } from "./apply.js";
+import { SAVE_LABEL, compass } from "./logic.js";
 
 const esc = (s) => foundry.utils.escapeHTML(String(s ?? ""));
+const SAVE_KINDS = [KIND.SAVE, KIND.DAMAGE, KIND.EXPLODE];
+const isSaveKind = (wf) => SAVE_KINDS.includes(wf.kind);
+const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
 
 function resultClass(r) {
-    if (r === RESULT.CRIT) return "crit";
-    if (r === RESULT.HIT) return "hit";
-    if (r === RESULT.MANUAL) return "manual";
-    return "miss";
+    switch (r) {
+        case RESULT.CRIT: return "crit";
+        case RESULT.HIT:
+        case RESULT.STRUCK:
+        case RESULT.FAILED: return "hit";
+        case RESULT.SAVED: return "saved";
+        case RESULT.MANUAL:
+        case RESULT.PENDING: return "manual";
+        default: return "miss";
+    }
 }
 
 function speaker(wf) {
@@ -21,42 +31,160 @@ function speaker(wf) {
     return { scene: a.sceneId, token: a.tokenId, actor: a.actorId, alias: a.name };
 }
 
+const AREA_WORD = { blast: "Blast", line: "Line", automatic: "Automatic", explode: "Explode" };
+
 function header(wf, gm) {
     const opts = (wf.options ?? []).map(k => ATTACK_OPTIONS[k]?.short).filter(Boolean);
     if (wf.nonlethal && !wf.options?.includes("nonlethal")) opts.push("Nonlethal");
     if (wf.cover && wf.cover !== "none") opts.push(`${COVER[wf.cover]?.short} cover`);
+    if (AREA_WORD[wf.kind]) opts.unshift(AREA_WORD[wf.kind]);
+    if (wf.save?.label && isSaveKind(wf)) opts.push(`${wf.save.label} save`);
+    if (wf.mode?.label) opts.push(wf.mode.label);
+    const title = gm ? wf.item.name : (wf.item.publicName ?? wf.item.name);
     return `<header class="sca-head">
         <img src="${esc(wf.item.img)}" alt="">
         <div class="sca-title-wrap">
-            <div class="sca-title">${esc(wf.item.name)}</div>
+            <div class="sca-title">${esc(title)}</div>
             <div class="sca-sub">${esc(wf.attacker.name)}${opts.length ? ` · ${esc(opts.join(", "))}` : ""}</div>
         </div>
         ${gm ? `<span class="sca-gm-badge">GM</span>` : ""}
     </header>`;
 }
 
-function publicRow(t, undone) {
+/** What the table sees for one target. */
+function resultText(t, wf) {
+    if (t.result === RESULT.SAVED && t.evaded) return "Saved: Evasion";
+    if (t.result === RESULT.FAILED && t.evaded === "improved") return "Failed: Improved Evasion";
+    if (t.result === RESULT.BLOCKED && isSaveKind(wf)) return "Unaffected";
+    return RESULT_LABEL[t.result] ?? t.result;
+}
+
+function publicRow(t, wf) {
     const ap = t.applied;
-    const res = RESULT_LABEL[t.result] ?? t.result;
+    const undone = wf.undone;
+    let extra = "";
+    if (t.stopped) extra += `<span class="sca-status">Line stopped</span>`;
+    if (t.save?.rider && !undone) extra += `<span class="sca-status">${esc(SAVE_LABEL[wf.rider?.type] ?? "")}: ${t.save.saved ? "saved" : "failed"}</span>`;
+    if (t.riderPending) extra += `<span class="sca-status">Save: rolling…</span>`;
     let dmg = "";
     if (ap && !undone) dmg = `<span class="sca-dmg">${ap.dealt} damage</span>`;
+    else if (!undone && isSaveKind(wf) && t.result !== RESULT.PENDING && (t.factor ?? 0) === 0) dmg = `<span class="sca-dmg">no damage</span>`;
     const status = ap?.status && !undone ? `<span class="sca-status">${esc(ap.status)}</span>` : "";
     return `<li class="sca-row sca-${resultClass(t.result)}">
         <img src="${esc(t.img)}" alt="">
         <span class="sca-name">${esc(t.name)}</span>
-        <span class="sca-res">${esc(res)}</span>${dmg}${status}
+        <span class="sca-res">${esc(resultText(t, wf))}</span>${extra}${dmg}${status}
     </li>`;
 }
 
+function publicExplodeLine(wf) {
+    if (wf.kind !== KIND.EXPLODE) return "";
+    const a = wf.attack;
+    if (a.hit) return `<div class="sca-line">On target${a.nat === 20 ? " (natural 20)" : ""}.</div>`;
+    const s = wf.scatter;
+    if (!s) return `<div class="sca-line">Missed.</div>`;
+    return `<div class="sca-line">Missed: it landed ${s.squares} square${s.squares === 1 ? "" : "s"} ${esc(compass(s.eighth))} of the aim point.</div>`;
+}
+
 export function publicContent(wf) {
+    const empty = !wf.targets.length ? `<div class="sca-line sca-notes">No one in the area.</div>` : "";
     return `<div class="sca-card${wf.undone ? " sca-undone" : ""}">
         ${header(wf, false)}
-        <ul class="sca-targets">${wf.targets.map(t => publicRow(t, wf.undone)).join("")}</ul>
+        ${publicExplodeLine(wf)}
+        <ul class="sca-targets">${wf.targets.map(t => publicRow(t, wf)).join("")}</ul>
+        ${empty}
         ${wf.undone ? `<footer class="sca-foot">Undone by the GM</footer>` : ""}
     </div>`;
 }
 
-function gmRow(t, i, wf) {
+/* ---------- GM card ---------- */
+
+function damageLines(ap) {
+    if (!ap) return "";
+    const b = ap.before, a = ap.after;
+    const pools = [];
+    if (b.temp || a.temp) pools.push(`Temp ${b.temp}→${a.temp}`);
+    if (b.spMax) pools.push(`SP ${b.sp}→${a.sp}`);
+    pools.push(`HP ${b.hp}→${a.hp}`);
+    return `<div class="sca-line">${ap.math.map(esc).join("<br>")}</div>
+        <div class="sca-line"><b>Dealt ${ap.dealt}</b> · ${esc(pools.join(" · "))}${ap.status ? ` · <b>${esc(ap.status)}</b>` : ""}</div>`;
+}
+
+const btn = (action, label, i, value) =>
+    `<button type="button" class="sca-btn" data-sca-action="${action}"${i != null ? ` data-sca-index="${i}"` : ""}${value ? ` data-sca-value="${value}"` : ""}>${label}</button>`;
+
+function byText(by) {
+    if (!by || by === "gm") return "rolled by the GM's client";
+    if (by.startsWith("player:")) return `rolled by ${by.slice(7)}`;
+    if (by.startsWith("gm:")) return `GM rolled (${by.slice(3)})`;
+    return by;
+}
+
+function saveLine(s, label) {
+    if (!s || s.none) return "";
+    const parts = [`d20 ${s.d20 ?? "?"}`];
+    const bonus = (s.roll ?? 0) - (s.d20 ?? 0);
+    parts.push(signed(bonus));
+    if (s.cover) parts.push(`${signed(s.cover)} cover`);
+    const verdict = s.saved ? "saved" : "failed";
+    const auto = s.d20 === 20 ? " (natural 20)" : s.d20 === 1 ? " (natural 1)" : "";
+    return `<div class="sca-line">${esc(label)} ${esc(parts.join(" "))} = ${s.total} vs DC ${s.dc}: <b>${verdict}</b>${auto} · ${esc(byText(s.by))}</div>`;
+}
+
+function evasionLine(t) {
+    const s = t.save;
+    if (!s) return "";
+    if (t.evaded === "evasion") return `<div class="sca-line">Evasion: no damage on a save</div>`;
+    if (t.evaded === "improved") return `<div class="sca-line">Improved Evasion: half on a failed save</div>`;
+    if (s.evasionLost) return `<div class="sca-line sca-notes">${esc(s.evasionHad === "improved" ? "Improved Evasion" : "Evasion")} doesn't apply (${esc(s.evasionLost)})</div>`;
+    return "";
+}
+
+function srLine(t) {
+    if (!t.sr) return "";
+    return `<div class="sca-line">SR ${t.sr.sr}: d20 ${t.sr.d20} + CL ${t.sr.cl} = ${t.sr.total}: <b>${t.sr.overcome ? "overcome" : "resisted"}</b></div>`;
+}
+
+function gmSaveRow(t, i, wf) {
+    const ap = t.applied;
+    const res = resultText(t, wf);
+    const notes = [...(t.notes ?? [])];
+    if (t.critTarget) notes.push("critical hit: nearest the intersection");
+    if (t.flipped) notes.push("changed by GM");
+    if (t.override) notes.push(`set to ${t.override} by GM`);
+    if (t.note) notes.push(t.note);
+    if (t.factor === 0.5 && !ap && !t.flagged && t.result !== RESULT.PENDING) notes.push("half damage");
+    const noteLine = notes.length ? `<div class="sca-line sca-notes">${esc(notes.join(" · "))}</div>` : "";
+    const rangeLine = t.rangeWarning
+        ? `<div class="sca-line sca-warn"><i class="fa-solid fa-triangle-exclamation"></i> Out of range: ${esc(t.rangeWarning.distance)} ft away, range ${esc(t.rangeWarning.range)} ft</div>`
+        : "";
+    const flagLine = t.flagged
+        ? `<div class="sca-line sca-warn"><i class="fa-solid fa-flag"></i> ${esc(wf.save?.note || "check the effect")}: half applied</div>`
+        : "";
+    const pending = t.result === RESULT.PENDING;
+    const buttons = [];
+    if (!wf.undone && !pending && wf.kind !== KIND.DAMAGE && t.result !== RESULT.MANUAL) {
+        if (t.result === RESULT.SAVED) buttons.push(btn("flipsave", "Make failed", i));
+        else if (t.result === RESULT.FAILED) buttons.push(btn("flipsave", "Make saved", i));
+        else if (t.result === RESULT.RESISTED) buttons.push(btn("flipsave", "Not resisted", i));
+        else if (t.result === RESULT.BLOCKED) buttons.push(btn("flipsave", "Roll save", i));
+    }
+    const shares = (!wf.undone && !pending && (t.flagged || t.override || t.result === RESULT.MANUAL))
+        ? `<div class="sca-line sca-share">${btn("share", "Full", i, "full")}${btn("share", "Half", i, "half")}${btn("share", "None", i, "none")}</div>`
+        : "";
+    if (!ap && !wf.undone && !pending && (t.factor ?? 0) > 0) buttons.push(btn("apply", "Apply", i));
+    return `<li class="sca-row sca-gm-row sca-${resultClass(t.result)}">
+        <div class="sca-row-head">
+            <img src="${esc(t.img)}" alt="">
+            <span class="sca-name">${esc(t.name)}</span>
+            <span class="sca-res">${esc(res)}</span>
+            ${buttons.join("")}
+        </div>
+        ${rangeLine}${srLine(t)}${saveLine(t.save, wf.save?.label ?? "")}${evasionLine(t)}${flagLine}${shares}${noteLine}${damageLines(ap)}
+    </li>`;
+}
+
+function gmAttackRow(t, i, wf) {
     const ap = t.applied;
     const res = RESULT_LABEL[t.result] ?? t.result;
     const ac = AC_LABEL[t.acKey] ?? t.acKey;
@@ -67,41 +195,68 @@ function gmRow(t, i, wf) {
         if (t.proneAdj) acParts.push(`${t.proneAdj > 0 ? "+" : ""}${t.proneAdj} prone`);
         const rollParts = [`${t.rollTotal}`];
         if (t.range?.penalty) rollParts.push(`${t.range.penalty} range`);
+        if (t.areaPenalty) rollParts.push(`${t.areaPenalty} ${wf.kind}`);
         if (t.helplessBonus) rollParts.push(`+${t.helplessBonus} helpless`);
         const effRoll = rollParts.length > 1 ? `${rollParts.join(" ")} = ${t.effTotal}` : `${t.rollTotal}`;
         const effAc = acParts.length > 1 ? `${acParts.join(" ")} = ${t.effAc}` : `${ac} ${t.baseAc}`;
         roll = `<div class="sca-line">d20 ${t.nat ?? "?"}: ${esc(effRoll)} vs ${esc(effAc)}</div>`;
     }
-    const notes = [...(t.notes ?? [])];
+    const notes = (t.notes ?? []).filter(n => !/^(blast|automatic) -\d/.test(n));
     if (t.range) notes.push(`${t.range.distance} ft (increment ${t.range.increment} ft)`);
     if (t.flipped) notes.push("flipped by GM");
+    if (t.stopped) notes.push("line stopped by an earlier creature that took no damage");
     if (t.note) notes.push(t.note);
     const noteLine = notes.length ? `<div class="sca-line sca-notes">${esc(notes.join(" · "))}</div>` : "";
     const reachLine = t.reach?.outOfReach
         ? `<div class="sca-line sca-warn"><i class="fa-solid fa-triangle-exclamation"></i> Out of reach: ${esc(t.reach.distance)} ft away, reach ${esc(t.reach.reach)} ft</div>`
         : "";
-    let dmg = "";
-    if (ap) {
-        const b = ap.before, a = ap.after;
-        const pools = [];
-        if (b.temp || a.temp) pools.push(`Temp ${b.temp}→${a.temp}`);
-        if (b.spMax) pools.push(`SP ${b.sp}→${a.sp}`);
-        pools.push(`HP ${b.hp}→${a.hp}`);
-        dmg = `<div class="sca-line">${ap.math.map(esc).join("<br>")}</div>
-            <div class="sca-line"><b>Dealt ${ap.dealt}</b> · ${esc(pools.join(" · "))}${ap.status ? ` · <b>${esc(ap.status)}</b>` : ""}</div>`;
-    }
-    const canApply = !ap && !wf.undone && (t.result === RESULT.HIT || t.result === RESULT.CRIT);
-    const flipLabel = (t.result === RESULT.HIT || t.result === RESULT.CRIT) ? "Make miss" : "Make hit";
+    const riderLine = t.riderPending
+        ? `<div class="sca-line sca-notes">${esc(wf.rider?.label ?? "")} save: rolling…</div>`
+        : (t.save?.rider ? saveLine(t.save, wf.rider?.label ?? "") + evasionLine(t) : "");
+    const hit = t.result === RESULT.HIT || t.result === RESULT.CRIT;
+    const canApply = !ap && !wf.undone && hit && !t.stopped && !t.riderPending;
+    const flipLabel = hit ? "Make miss" : "Make hit";
     return `<li class="sca-row sca-gm-row sca-${resultClass(t.result)}">
         <div class="sca-row-head">
             <img src="${esc(t.img)}" alt="">
             <span class="sca-name">${esc(t.name)}</span>
             <span class="sca-res">${esc(res)}</span>
-            ${wf.undone ? "" : `<button type="button" class="sca-btn" data-sca-action="flip" data-sca-index="${i}">${flipLabel}</button>`}
-            ${canApply ? `<button type="button" class="sca-btn" data-sca-action="apply" data-sca-index="${i}">Apply</button>` : ""}
+            ${wf.undone ? "" : btn("flip", flipLabel, i)}
+            ${canApply ? btn("apply", "Apply", i) : ""}
         </div>
-        ${reachLine}${roll}${noteLine}${dmg}
+        ${reachLine}${roll}${riderLine}${noteLine}${damageLines(ap)}
     </li>`;
+}
+
+/** The top of the GM card: the attack (if any) and the DC. */
+function gmSummary(wf) {
+    const lines = [];
+    if (wf.kind === KIND.EXPLODE) {
+        const a = wf.attack;
+        const pen = a.penalty ? ` ${a.penalty} range = ${a.eff}` : "";
+        const dist = a.distance != null ? ` · ${a.distance} ft` : "";
+        lines.push(`Attack ${a.total} (d20 ${a.nat ?? "?"})${pen} vs AC 5: <b>${a.hit ? "on target" : "missed"}</b>${esc(dist)}`);
+        if (wf.scatter) {
+            const s = wf.scatter;
+            lines.push(`Scatter: d8 ${s.d8} (${esc(compass(s.eighth))}), d4 ${s.d4}: landed ${s.squares} square${s.squares === 1 ? "" : "s"} away`);
+        }
+        for (const n of a.notes ?? []) lines.push(`<span class="sca-warn">${esc(n)}</span>`);
+    } else if (!isSaveKind(wf)) {
+        const pen = wf.attack.penalty ? ` · ${wf.attack.penalty} ${wf.kind} each` : "";
+        lines.push(`Attack ${wf.attack.total} (d20 ${wf.attack.nat ?? "?"})${esc(pen)}${wf.nonlethal ? " · nonlethal" : ""}`);
+        if (wf.kind === KIND.BLAST || wf.kind === KIND.AUTOMATIC) lines.push(`<span class="sca-notes">A d20 per creature, nearest first${wf.kind === KIND.AUTOMATIC ? "; no crits; each creature uses two shots of ammo (spend by hand)" : ""}</span>`);
+        if (wf.kind === KIND.LINE) lines.push(`<span class="sca-notes">One roll against each creature in the line, nearest first; only the first can be crit</span>`);
+        if (wf.rider) lines.push(`${esc(wf.rider.label)} DC ${wf.rider.dc} on a hit (${esc(wf.rider.descriptor || "save")})`);
+    }
+    if (isSaveKind(wf) && wf.save) {
+        const parts = (wf.save.parts ?? []).map(p => `${signed(p.value)} ${p.label}`);
+        const base = parts.length ? `${wf.save.base} ${parts.join(" ")} = ` : "";
+        const half = wf.save.onSave === "half" ? "half" : wf.save.onSave === "none" ? "negates" : "no effect on damage";
+        lines.push(`${esc(wf.save.label)} DC ${esc(base)}<b>${wf.save.dc}</b> (${half})${wf.item.allowsSR ? " · SR applies" : ""}`);
+    } else if (wf.kind === KIND.DAMAGE) {
+        lines.push(`No attack and no save: full damage to each target`);
+    }
+    return lines.map(l => `<div class="sca-line">${l}</div>`).join("");
 }
 
 export function gmContent(wf) {
@@ -109,19 +264,23 @@ export function gmContent(wf) {
     const dmgLine = [];
     if (wf.damage?.normal?.length) dmgLine.push(`Damage ${sections("normal")}`);
     if (wf.damage?.crit?.length) dmgLine.push(`Crit ${sections("crit")}`);
+    const row = isSaveKind(wf) ? gmSaveRow : gmAttackRow;
+    const empty = !wf.targets.length ? `<div class="sca-line sca-notes">No one in the area.</div>` : "";
     return `<div class="sca-card sca-gm${wf.undone ? " sca-undone" : ""}">
         ${header(wf, true)}
-        <div class="sca-line">Attack ${wf.attack.total} (d20 ${wf.attack.nat ?? "?"})${wf.nonlethal ? " · nonlethal" : ""}</div>
+        ${gmSummary(wf)}
         ${dmgLine.length ? `<div class="sca-line">${esc(dmgLine.join(" · "))}</div>` : ""}
-        <ul class="sca-targets">${wf.targets.map((t, i) => gmRow(t, i, wf)).join("")}</ul>
+        <ul class="sca-targets">${wf.targets.map((t, i) => row(t, i, wf)).join("")}</ul>
+        ${empty}
         <footer class="sca-foot">
             ${wf.undone
-        ? `<span>Undone</span><button type="button" class="sca-btn" data-sca-action="redo">Reapply</button>`
-        : `<button type="button" class="sca-btn" data-sca-action="undo">Undo</button>`}
+        ? `<span>Undone</span>${btn("redo", "Reapply")}`
+        : btn("undo", "Undo")}
         </footer>
     </div>`;
 }
 
+/** Post both cards; returns the GM card's message. */
 export async function createCards(wf) {
     const pub = await ChatMessage.create({
         speaker: speaker(wf),
@@ -130,7 +289,7 @@ export async function createCards(wf) {
     });
     wf.publicMessageId = pub?.id ?? null;
     const gmIds = ChatMessage.getWhisperRecipients("GM").map(u => u.id);
-    await ChatMessage.create({
+    return ChatMessage.create({
         speaker: speaker(wf),
         content: gmContent(wf),
         whisper: gmIds,
@@ -159,15 +318,15 @@ export function onRenderChatMessage(message, html) {
         el.querySelectorAll("[data-sca-action]").forEach(b => b.remove());
         return;
     }
-    el.querySelectorAll("[data-sca-action]").forEach(btn => {
-        btn.addEventListener("click", async (ev) => {
+    el.querySelectorAll("[data-sca-action]").forEach(button => {
+        button.addEventListener("click", async (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
-            const card = btn.closest(".sca-card");
+            const card = button.closest(".sca-card");
             card?.classList.add("sca-busy");
             try {
-                const idx = btn.dataset.scaIndex != null ? Number(btn.dataset.scaIndex) : null;
-                await gmAction(message, btn.dataset.scaAction, idx);
+                const idx = button.dataset.scaIndex != null ? Number(button.dataset.scaIndex) : null;
+                await gmAction(message, button.dataset.scaAction, idx, button.dataset.scaValue);
             } catch (err) {
                 console.error(`${MODULE_ID} |`, err);
                 ui.notifications.error(`Combat automation: ${err.message ?? err}`);

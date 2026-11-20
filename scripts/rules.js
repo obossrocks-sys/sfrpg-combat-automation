@@ -1,5 +1,6 @@
 import { KINETIC, ENERGY, COVER, RESULT } from "./constants.js";
 import { getSetting } from "./settings.js";
+import { rangePenaltyFor } from "./logic.js";
 
 /** The damage types an item deals, as a flat list (e.g. ["fire", "piercing"]) plus the operator. */
 export function itemDamageTypes(item) {
@@ -150,42 +151,68 @@ export function reachInfo(item, attackerToken, targetToken) {
     return { distance, reach, outOfReach: !inReach };
 }
 
+/** A spell or ability's flat range in feet: "ft" ranges, or sfrpg's close/medium/long totals. */
+export function flatRange(item) {
+    const range = item?.system?.range ?? {};
+    if (range.units === "ft") return Number(range.total) || Number(range.value) || null;
+    if (["close", "medium", "long"].includes(range.units)) {
+        const total = Number(range.total)
+            || Number(item?.actor?.system?.spells?.range?.[range.units]);
+        return total || null;
+    }
+    return null;
+}
+
 /**
  * Range penalty for a ranged weapon attack. Weapons: -2 per full increment past the first
- * (-1 with Far Shot); max 10 increments (thrown 5). Returns null when range doesn't apply.
+ * (-1 with Far Shot); max 10 increments (thrown 5). Spells and other ranged attacks have a flat
+ * range (close, medium and long from sfrpg's totals). Returns null when range doesn't apply.
  */
-export function rangeInfo(item, attackerToken, targetToken) {
+export function rangeInfo(item, attackerToken, targetToken, { distance = null } = {}) {
     if (!getSetting("rangePenalties")) return null;
     if (attackKind(item) !== "ranged") return null;
     const range = item.system?.range ?? {};
-    const increment = Number(range.value);
-    if (!(range.units === "ft" && increment > 0)) return null;
-    const distance = tokenDistance(attackerToken, targetToken);
-    if (distance == null) return null;
 
     if (item.type !== "weapon") {
-        // Spells and other ranged attacks with a flat range: no increments, just the maximum.
-        return { distance, increment, increments: 1, penalty: 0, outOfRange: distance > increment, maxRange: increment, flat: true };
+        const flat = flatRange(item);
+        if (!flat) return null;
+        const d = distance ?? tokenDistance(attackerToken, targetToken);
+        if (d == null) return null;
+        return { distance: d, increment: flat, increments: 1, penalty: 0, outOfRange: d > flat, maxRange: flat, flat: true };
     }
+    const increment = Number(range.value);
+    if (!(range.units === "ft" && increment > 0)) return null;
+    const d = distance ?? tokenDistance(attackerToken, targetToken);
+    if (d == null) return null;
     const thrown = !!item.system?.properties?.thrown?.value;
-    const maxIncrements = thrown ? 5 : 10;
-    const increments = Math.max(1, Math.ceil(distance / increment));
-    const farShot = !!item.actor?.items?.find(i => i.type === "feat" && /^far shot$/i.test(i.name.trim()));
-    const per = farShot ? 1 : 2;
-    const penalty = -per * (increments - 1);
-    return { distance, increment, increments, penalty, outOfRange: increments > maxIncrements, maxRange: increment * maxIncrements, farShot };
+    const farShot = hasFarShot(item.actor);
+    return rangePenaltyFor(d, increment, { thrown, farShot });
+}
+
+export function hasFarShot(actor) {
+    return !!actor?.items?.find(i => i.type === "feat" && /^far shot$/i.test(i.name.trim()));
+}
+
+/** Out-of-range warning for save spells aimed at targets (the GM card shows it; nothing is blocked). */
+export function saveRangeWarning(item, attackerToken, targetToken) {
+    const flat = flatRange(item);
+    if (!flat || !attackerToken || !targetToken) return null;
+    const d = tokenDistance(attackerToken, targetToken);
+    if (d == null || d <= flat) return null;
+    return { distance: d, range: flat };
 }
 
 /**
  * Resolve one attack roll against one target.
  * @returns per-target result object (no damage yet).
  */
-export function resolveTarget({ item, roll, attackerToken, targetToken, cover = "none" }) {
+export function resolveTarget({ item, roll, attackerToken, targetToken, cover = "none",
+    total: totalOverride = null, nat: natOverride = null, penalty = 0, penaltyLabel = "", noCrit = false, skipRange = false }) {
     const actor = targetToken.actor;
     const acKey = pickAcKey(item);
     const kind = attackKind(item);
-    const nat = naturalD20(roll);
-    const total = roll.total;
+    const nat = natOverride ?? naturalD20(roll);
+    const total = totalOverride ?? roll.total;
 
     const out = {
         tokenUuid: targetToken.document.uuid,
@@ -226,7 +253,7 @@ export function resolveTarget({ item, roll, attackerToken, targetToken, cover = 
 
     out.reach = reachInfo(item, attackerToken, targetToken);
 
-    const r = rangeInfo(item, attackerToken, targetToken);
+    const r = skipRange ? null : rangeInfo(item, attackerToken, targetToken);
     out.range = r;
     let rangePenalty = 0;
     if (r) {
@@ -234,7 +261,9 @@ export function resolveTarget({ item, roll, attackerToken, targetToken, cover = 
         if (r.penalty) out.notes.push(`range ${r.distance} ft: ${r.penalty}${r.farShot ? " (Far Shot)" : ""}`);
     }
 
-    out.effTotal = total + rangePenalty + out.helplessBonus;
+    out.areaPenalty = penalty;
+    if (penalty) out.notes.push(`${penaltyLabel} ${penalty}`.trim());
+    out.effTotal = total + rangePenalty + out.helplessBonus + penalty;
     out.effAc = ac + out.coverBonus + out.proneAdj;
 
     if (r?.outOfRange) {
@@ -245,9 +274,10 @@ export function resolveTarget({ item, roll, attackerToken, targetToken, cover = 
 
     const meets = out.effTotal >= out.effAc;
     if (nat === 1) out.result = RESULT.MISS;
-    else if (nat === 20) out.result = meets ? RESULT.CRIT : RESULT.HIT;
+    else if (nat === 20) out.result = meets && !noCrit ? RESULT.CRIT : RESULT.HIT;
     else out.result = meets ? RESULT.HIT : RESULT.MISS;
     if (nat === 20 && !meets) out.notes.push("natural 20: hits, no crit");
+    else if (nat === 20 && noCrit) out.notes.push("natural 20: hits, can't crit here");
     if (nat === 1) out.notes.push("natural 1");
     return out;
 }

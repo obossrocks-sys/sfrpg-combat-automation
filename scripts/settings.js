@@ -46,6 +46,48 @@ export function registerSettings() {
         hint: "-2 per full range increment past the first (-1 with Far Shot); attacks past maximum range miss.",
         scope: "world", config: true, type: Boolean, default: true
     });
+    // Layer 2: saves and areas
+    reg("automateSaves", {
+        name: "Automate saves",
+        hint: "When damage is rolled for a spell or ability with a save and tokens are targeted, roll each target's save and apply full, half or no damage. Explode weapons (grenades) aim at an intersection (AC 5), scatter on a miss, then everyone in the burst saves Reflex for half.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
+    reg("areaAttacks", {
+        name: "Area attack weapons",
+        hint: "Blast, line and automatic-mode weapons attack every creature in their cone or line, each by its own rule (CRB 180-181). The cone or line is placed when you attack, unless you placed it from the item card first.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
+    reg("templateTargets", {
+        name: "Templates target tokens",
+        hint: "Placing an area template from an item card targets every token in the squares it highlights (on the placer's screen). Shift-click tokens to adjust before rolling.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
+    reg("playerSaves", {
+        name: "Player saves",
+        hint: "Who rolls a PC's save. Players: a prompt opens on the owner's screen; if they're offline or don't answer in time, the GM's client rolls it.",
+        scope: "world", config: true, type: String, default: "player",
+        choices: { player: "The player rolls (prompt)", gm: "The GM's client rolls every save" }
+    });
+    reg("saveTimeout", {
+        name: "Save prompt timeout (seconds)",
+        scope: "world", config: true, type: Number, default: 30,
+        range: { min: 5, max: 120, step: 5 }
+    });
+    reg("spellResistance", {
+        name: "Spell resistance checks",
+        hint: "For spells that allow SR, roll d20 + caster level against each target's SR; a failed check means no effect.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
+    reg("damageOnly", {
+        name: "Damage-only effects hit targets",
+        hint: "Damage rolled for an item with no attack and no save (for example magic missile) is applied in full to the targeted tokens.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
+    reg("hideDCs", {
+        name: "Hide save DCs from players",
+        hint: "Module cards show only Saved or Failed, and DCs are removed from NPC item cards and roll titles before they're posted.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
     reg("showBar", {
         name: "Show the attack-options bar",
         scope: "client", config: true, type: Boolean, default: true,

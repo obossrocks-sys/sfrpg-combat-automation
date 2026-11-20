@@ -16,7 +16,9 @@ function globalMod(opt) {
 class AttackBar {
     constructor() {
         this.el = null;
-        this.state = { options: {}, cover: "none" };
+        this.state = { options: {}, cover: "none", auto: false };
+        /** Modal weapons: the mode picked for each item this session (itemUuid -> part index). */
+        this.modes = new Map();
     }
 
     load() {
@@ -65,6 +67,26 @@ class AttackBar {
         return c;
     }
 
+    clearModes() {
+        this.modes.clear();
+        ui.notifications.info("Modal weapons will ask for their mode on the next attack.");
+    }
+
+    toggleAuto() {
+        this.state.auto = !this.state.auto;
+        this.render();
+    }
+
+    /** Automatic mode applies to the next attack and then resets. */
+    consumeAuto() {
+        const a = !!this.state.auto;
+        if (a) {
+            this.state.auto = false;
+            this.render();
+        }
+        return a;
+    }
+
     /** Full attack lasts until the end of the turn. */
     onTurnChange() {
         if (this.state.options.fullAttack) this.toggle("fullAttack", false);
@@ -98,12 +120,14 @@ class AttackBar {
             `<button type="button" data-sca-opt="${k}" class="${this.isOn(k) ? "on" : ""}" data-tooltip="${o.label}: ${o.hint}">${o.short}</button>`
         ).join("");
         const cov = Object.entries(COVER).filter(([k]) => k !== "none").map(([k, c]) =>
-            `<button type="button" data-sca-cover="${k}" class="${this.state.cover === k ? "on" : ""}" data-tooltip="${c.label}, next attack only">${c.short}</button>`
+            `<button type="button" data-sca-cover="${k}" class="${this.state.cover === k ? "on" : ""}" data-tooltip="${c.label}, next attack or effect only">${c.short}</button>`
         ).join("");
         const gm = game.user.isGM
             ? `<span class="sca-sep"></span><button type="button" data-sca-gm="flatfooted" data-tooltip="Toggle flat-footed on the targeted tokens">Flat-footed</button>`
             : "";
-        this.el.innerHTML = `<span class="sca-label">Attack</span>${opt}<span class="sca-sep"></span><span class="sca-label">Cover</span>${cov}${gm}`;
+        const mode = `<button type="button" data-sca-mode="1" data-tooltip="Modal weapons: pick the mode again on the next attack">Mode</button>`;
+        const auto = `<button type="button" data-sca-auto="1" class="${this.state.auto ? "on" : ""}" data-tooltip="Automatic mode, next attack only: an automatic weapon fires at every creature in a cone of half its range increment, a d20 each at -4, no crits">Auto</button>`;
+        this.el.innerHTML = `<span class="sca-label">Attack</span>${opt}${auto}${mode}<span class="sca-sep"></span><span class="sca-label">Cover</span>${cov}${gm}`;
     }
 
     async #onClick(ev) {
@@ -111,6 +135,8 @@ class AttackBar {
         if (!b) return;
         if (b.dataset.scaOpt) this.toggle(b.dataset.scaOpt);
         else if (b.dataset.scaCover) this.setCover(b.dataset.scaCover);
+        else if (b.dataset.scaAuto) this.toggleAuto();
+        else if (b.dataset.scaMode) this.clearModes();
         else if (b.dataset.scaGm === "flatfooted") {
             const targets = [...game.user.targets].filter(t => t.actor);
             if (!targets.length) return ui.notifications.info("Target one or more tokens first.");
