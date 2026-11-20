@@ -188,6 +188,15 @@ function stripDCsFrom(root) {
         el.removeAttribute("data-dc");
         changed = true;
     }
+    for (const el of root.querySelectorAll("[title], [alt], [aria-label], [data-tooltip]")) {
+        for (const attr of ["title", "alt", "aria-label", "data-tooltip"]) {
+            const v = el.getAttribute(attr);
+            if (v && /\bDC\s*\d+/i.test(v)) {
+                el.setAttribute(attr, stripDCs(v).trim());
+                changed = true;
+            }
+        }
+    }
     const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
         if (/\bDC\s*\d+/i.test(n.nodeValue)) {
