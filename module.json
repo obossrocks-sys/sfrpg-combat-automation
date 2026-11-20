@@ -1,7 +1,7 @@
 {
   "id": "sfrpg-combat-automation",
   "title": "SFRPG Combat Automation",
-  "description": "Targeted attacks for Starfinder 1e: picks EAC or KAC, calls hit, miss and critical per target (cover, prone, range), rolls damage on a hit and applies it on the GM's client with the system's own DR, energy resistance, Stamina and HP math, then nonlethal and 0 HP. One card per attack, with Undo and flip hit/miss.",
+  "description": "Combat automation for Starfinder 1e: targeted attacks against EAC or KAC with hit, miss and critical per target (cover, prone, range, reach), damage applied on the GM's client with the system's own DR, energy resistance, Stamina and HP math, then nonlethal and 0 HP. Saves for spells, abilities and grenades (players roll their own; full, half or none per target; Evasion; spell resistance), and area weapons (explode, blast, line, automatic). One card per attack or effect, with Undo and flips.",
   "version": "0.2.0",
   "authors": [
     {
