@@ -235,6 +235,15 @@ export async function tokensInTemplate(doc, { excludeActorUuid = null, excludeOr
     return tokens;
 }
 
+/**
+ * A square's center as a flat point. v14 gives token squares an elevation and other points none,
+ * and measuring between the two returns NaN.
+ */
+function center(o) {
+    const c = canvas.grid.getCenterPoint(o);
+    return { x: c.x, y: c.y };
+}
+
 /** The grid squares (offsets) a token covers. */
 function squaresOf(token) {
     try {
@@ -261,7 +270,7 @@ export function distanceToPoint(token, point) {
     let best = Infinity;
     for (const a of squaresOf(token)) {
         for (const b of squaresAtPoint(point)) {
-            const d = canvas.grid.measurePath([canvas.grid.getCenterPoint(a), canvas.grid.getCenterPoint(b)]).distance;
+            const d = canvas.grid.measurePath([center(a), center(b)]).distance;
             if (d < best) best = d;
         }
     }
@@ -273,7 +282,7 @@ export function nearestToPoint(tokens, point) {
     let best = null, bestD = Infinity;
     for (const t of tokens) {
         for (const o of squaresOf(t)) {
-            const c = canvas.grid.getCenterPoint(o);
+            const c = center(o);
             const d = Math.hypot(c.x - point.x, c.y - point.y);
             if (d < bestD - 0.5) {
                 bestD = d;
@@ -289,8 +298,8 @@ export function sortByDistance(tokens, from) {
     const dist = (t) => {
         let best = Infinity;
         for (const a of squaresOf(from)) for (const b of squaresOf(t)) {
-            const d = canvas.grid.measurePath([canvas.grid.getCenterPoint(a), canvas.grid.getCenterPoint(b)]).distance;
-            best = Math.min(best, d);
+            const d = canvas.grid.measurePath([center(a), center(b)]).distance;
+            if (Number.isFinite(d)) best = Math.min(best, d);
         }
         return best;
     };
