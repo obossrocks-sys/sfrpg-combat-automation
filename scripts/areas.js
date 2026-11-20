@@ -223,16 +223,71 @@ function isOut(token) {
 }
 
 /**
- * Tokens in the squares a template highlights (sfrpg's Starfinder shapes). Leaves out
- * defeated tokens, tokens this user can't see, and, for cones and lines, the caster.
+ * Tokens in the squares a template covers. Circles and cones use sfrpg's Starfinder squares
+ * (getTokensWithin). Lines and squares are worked out here: in v14 their template has no shape,
+ * and sfrpg's method fails for them. Leaves out defeated tokens, tokens this user can't see, and,
+ * for cones and lines, the caster.
  */
 export async function tokensInTemplate(doc, { excludeActorUuid = null, excludeOrigin = false } = {}) {
-    const obj = await waitForObject(doc);
-    if (!obj?.getTokensWithin) return [];
-    let tokens = obj.getTokensWithin();
+    let tokens = null;
+    if (["circle", "cone"].includes(doc.t)) {
+        const obj = await waitForObject(doc);
+        try {
+            tokens = obj?.getTokensWithin?.() ?? null;
+        } catch (err) {
+            console.warn(`${MODULE_ID} | sfrpg's getTokensWithin failed`, err);
+        }
+    }
+    if (!tokens) {
+        const squares = coveredSquares(doc);
+        tokens = canvas.tokens.placeables.filter(t => squaresOf(t).some(o => squares.has(`${o.i},${o.j}`)));
+    }
     tokens = tokens.filter(t => t.actor && !isOut(t) && (game.user.isGM || t.visible));
     if (excludeOrigin && excludeActorUuid) tokens = tokens.filter(t => t.actor?.uuid !== excludeActorUuid);
     return tokens;
+}
+
+/** Grid squares a line or rectangle template covers ("i,j" keys). */
+function coveredSquares(doc) {
+    const size = canvas.grid.size;
+    const pxPerFt = size / canvas.dimensions.distance;
+    const region = doc.parent?.regions?.get?.(doc.id);
+    const shape = region && isTemplateRegion(region) ? region.toObject().shapes?.[0] : null;
+    const out = new Set();
+    const add = (p) => {
+        const o = canvas.grid.getOffset(p);
+        out.add(`${o.i},${o.j}`);
+    };
+    if (doc.t === "ray") {
+        // The squares the line's center passes through, sampled every quarter square.
+        const x = shape?.x ?? doc.x;
+        const y = shape?.y ?? doc.y;
+        const length = shape?.length ?? doc.distance * pxPerFt;
+        const angle = ((shape?.rotation ?? doc.direction) || 0) * Math.PI / 180;
+        const step = size / 4;
+        for (let d = step / 2; d <= length; d += step) add({ x: x + Math.cos(angle) * d, y: y + Math.sin(angle) * d });
+        return out;
+    }
+    if (doc.t === "rect") {
+        // Squares whose center is inside the rectangle.
+        let x0, y0, w, h;
+        if (shape && typeof shape.width === "number" && typeof shape.height === "number") {
+            x0 = shape.x; y0 = shape.y; w = shape.width; h = shape.height;
+        } else {
+            const a = (doc.direction || 0) * Math.PI / 180;
+            const dPx = doc.distance * pxPerFt;
+            x0 = doc.x; y0 = doc.y; w = Math.cos(a) * dPx; h = Math.sin(a) * dPx;
+        }
+        const [xa, xb] = [Math.min(x0, x0 + w), Math.max(x0, x0 + w)];
+        const [ya, yb] = [Math.min(y0, y0 + h), Math.max(y0, y0 + h)];
+        for (let cx = Math.floor(xa / size) * size + size / 2; cx < xb; cx += size) {
+            for (let cy = Math.floor(ya / size) * size + size / 2; cy < yb; cy += size) {
+                if (cx > xa && cx < xb && cy > ya && cy < yb) add({ x: cx, y: cy });
+            }
+        }
+        return out;
+    }
+    return out;
 }
 
 /**
