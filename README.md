@@ -44,6 +44,14 @@ sfrpg's own "Targets: KAC 22 - HIT" tag on the attack roll is removed when the m
 - **Ongoing damage:** burning, bleeding and corrode deal their damage at the start of the creature's turn (DR, ER and 0 HP as any hit). Burning and corrode get a Reflex save at the end of its turn (DC 10 + that turn's damage); bleeding stops once the creature has been healed.
 - **The cards:** the public card shows the conditions and their length; the GM card adds the saves and DCs, **Remove conditions** (per target, keeps the damage) and pick buttons for arc ties and jet. Undo and the flips take conditions back with the damage.
 
+## Ammunition and limited uses (layer 4, 0.4.0)
+sfrpg already spends a weapon's usage on each attack, refills on Reload, and spends spell slots and activated items' uses. The module adds what it leaves out:
+- **Empty weapons don't fire:** an attack with less ammunition than a shot uses stops with a message (reload, a move action). Ctrl-click attacks anyway, as sfrpg's own "don't spend ammo".
+- **Grenades leave the inventory:** a throw takes one from the quantity and draws the next if any are left; with none left, the grenade can't be thrown.
+- **Automatic mode** (CRB 180): two shots' worth per creature, nearest first (ties at the cut picked at random), stopping when the ammunition can't pay for the next creature; the attack uses all the remaining ammunition. The GM card shows what was loaded and who wasn't attacked; the public card names them.
+- **Abilities with limited uses** (feats) that attack or roll damage spend a use, and can't be used with none left. Consumables and other gear stay with sfrpg's Use button.
+- Setting: **Ammunition and limited uses** (world, on).
+
 ## Attack-options bar
 A small bar above the hotbar, per user and sticky: Full attack (clears when the turn passes), Flanking, Nonlethal, Fight defensively, Charge, Harrying fire. Each drives one of sfrpg's own global attack modifiers (`CONFIG.SFRPG.globalAttackRollModifiers`, found by `_id`), so the quick roll includes it. Auto turns on automatic mode for the next attack; Mode makes modal weapons ask for their mode again (double weapons ask every attack). Cover (partial, cover, improved, total) applies to the next attack or effect only. GMs also get a Flat-footed button that toggles sfrpg's condition on the targeted tokens.
 
@@ -54,7 +62,7 @@ No targets: plain sfrpg (area weapons open the template preview instead). No GM 
 Drag the grip at its left end to move it anywhere; the spot is saved per user. Double-click the grip to put it back under the hotbar. **Cover picked by the GM applies to the next attack or effect by anyone** (players see "GM: Cover" on their bar); a player's own pick applies to their own next attack. The higher of the two counts.
 
 ## Settings
-Automate targeted attacks; roll damage on a hit; apply damage automatically (off: the GM card shows Apply); conditions at 0 HP; hide the system's AC tag; **GM sees only the GM card** (hides the public card on GM screens; on by default); clear targets after each attack (off by default since 0.2.2: targets stay until the player changes them); **remove the dead from the combat tracker** (0.2.2; on); **conditions from failed saves, critical hit effects, burning/bleeding/corrode each turn** (0.3.0; all on); range penalties; show the bar (per user). Layer 2: automate saves; area attack weapons; templates target tokens; player saves (prompt or GM) and the prompt timeout; spell resistance checks; damage-only effects hit targets; hide save DCs from players.
+Automate targeted attacks; roll damage on a hit; apply damage automatically (off: the GM card shows Apply); conditions at 0 HP; hide the system's AC tag; **GM sees only the GM card** (hides the public card on GM screens; on by default); clear targets after each attack (off by default since 0.2.2: targets stay until the player changes them); **remove the dead from the combat tracker** (0.2.2; on); **conditions from failed saves, critical hit effects, burning/bleeding/corrode each turn** (0.3.0; all on); **ammunition and limited uses** (0.4.0; on); range penalties; show the bar (per user). Layer 2: automate saves; area attack weapons; templates target tokens; player saves (prompt or GM) and the prompt timeout; spell resistance checks; damage-only effects hit targets; hide save DCs from players.
 
 ## Files
 - `module.json`: manifest (requires socketlib).
@@ -67,6 +75,7 @@ Automate targeted attacks; roll damage on a hit; apply damage automatically (off
 - `scripts/apply.js`: the GM's side (apply, shares, saves, line stop, riders, nonlethal, 0 HP and drones, undo, flips).
 - `scripts/effects.js`: layer 3's pure rules (reading conditions and durations, the critical hit effects, immunities, the round clock), unit-tested.
 - `scripts/conditions.js`: layer 3 on Foundry (applying and removing conditions, ongoing damage, the end-of-duration clock).
+- `scripts/ammo.js`: layer 4 (the empty-weapon check, grenades, automatic mode's ammunition, ability uses).
 - `scripts/cards.js`: the public card and the GM card, button wiring.
 - `scripts/options-bar.js`: the bar.
 - `scripts/socket.js`, `scripts/settings.js`, `scripts/constants.js`.
