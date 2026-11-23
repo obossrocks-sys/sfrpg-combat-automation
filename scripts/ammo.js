@@ -10,8 +10,8 @@
  *    takes one from the quantity and draws the next if any are left;
  *  - automatic mode spends two shots' worth per creature, nearest first, stops when it can't pay
  *    for the next creature, and uses all the remaining ammunition (CRB 180);
- *  - abilities (feats and the like) with limited uses that attack or roll damage never spend a
- *    use: the module spends one when sfrpg didn't.
+ *  - abilities (feats) with limited uses that attack or roll damage never spend a use: the module
+ *    spends one when sfrpg didn't.
  */
 import { MODULE_ID } from "./constants.js";
 import { getSetting } from "./settings.js";
@@ -61,9 +61,12 @@ export function emptyMessage(item) {
 
 /* ---------- limited uses (abilities) ---------- */
 
-/** Uses to track for this item, or null (weapons use ammo; spells and activations are sfrpg's). */
+/**
+ * Uses to track, or null. Only abilities (feats): weapons use ammo, spells are spent by useSpell,
+ * and consumables and other gear are spent by sfrpg's Use button.
+ */
 function usesOf(item) {
-    if (!item || ["weapon", "spell", "consumable", "ammunition"].includes(item.type)) return null;
+    if (item?.type !== "feat") return null;
     let has = false;
     try {
         has = !!item.hasUses?.();
