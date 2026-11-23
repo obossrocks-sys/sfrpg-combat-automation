@@ -95,6 +95,7 @@ export function publicContent(wf) {
         ${publicExplodeLine(wf)}
         <ul class="sca-targets">${wf.targets.map(t => publicRow(t, wf)).join("")}</ul>
         ${empty}
+        ${wf.ammo?.notAttacked?.length ? `<div class="sca-line sca-notes">Out of ammunition before ${esc(wf.ammo.notAttacked.join(", "))}</div>` : ""}
         ${wf.undone ? `<footer class="sca-foot">Undone by the GM</footer>` : ""}
     </div>`;
 }
@@ -274,7 +275,12 @@ function gmSummary(wf) {
     } else if (!isSaveKind(wf)) {
         const pen = wf.attack.penalty ? ` · ${wf.attack.penalty} ${wf.kind} each` : "";
         lines.push(`Attack ${wf.attack.total} (d20 ${wf.attack.nat ?? "?"})${esc(pen)}${wf.nonlethal ? " · nonlethal" : ""}`);
-        if (wf.kind === KIND.BLAST || wf.kind === KIND.AUTOMATIC) lines.push(`<span class="sca-notes">A d20 per creature, nearest first${wf.kind === KIND.AUTOMATIC ? "; no crits; each creature uses two shots of ammo (spend by hand)" : ""}</span>`);
+        if (wf.kind === KIND.BLAST || wf.kind === KIND.AUTOMATIC) lines.push(`<span class="sca-notes">A d20 per creature, nearest first${wf.kind === KIND.AUTOMATIC ? (wf.ammo ? "; no crits" : "; no crits; each creature uses two shots of ammo (spend by hand)") : ""}</span>`);
+        if (wf.ammo) {
+            const m = wf.ammo;
+            lines.push(`<span class="sca-notes">Ammo: ${m.available} loaded, ${m.per} per creature: ${m.attacked} attacked; all of it used</span>`);
+            if (m.notAttacked?.length) lines.push(`<span class="sca-warn">Out of ammo before: ${esc(m.notAttacked.join(", "))}</span>`);
+        }
         if (wf.kind === KIND.LINE) lines.push(`<span class="sca-notes">One roll against each creature in the line, nearest first; only the first can be crit</span>`);
         if (wf.rider) lines.push(`${esc(wf.rider.label)} DC ${wf.rider.dc} on a hit (${esc(wf.rider.descriptor || "save")})`);
     }

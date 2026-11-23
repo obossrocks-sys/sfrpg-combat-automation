@@ -5,6 +5,7 @@ import { onAttackRolled, onDamageRolled, onPreCreateChatMessage, wrapRollDamage,
 import { processAttack, processSave, onDeadStatus } from "./apply.js";
 import { onCombatTurn, onCombatEnd, onWorldTime } from "./conditions.js";
 import * as effects from "./effects.js";
+import { wrapRollAttack } from "./ammo.js";
 import { promptSave } from "./saves.js";
 import { onRenderChatMessage } from "./cards.js";
 import { wrapPlaceAbilityTemplate, onPreCreateTemplate, onCreateTemplate, onPreCreateRegion, onCreateRegion, explodeArea } from "./areas.js";
@@ -61,6 +62,7 @@ function start() {
     const itemProto = CONFIG.Item.documentClass?.prototype;
     patch(itemProto, "rollDamage", wrapRollDamage);
     patch(itemProto, "roll", wrapItemRoll);
+    patch(itemProto, "rollAttack", wrapRollAttack);
     patch(itemProto, "placeAbilityTemplate", wrapPlaceAbilityTemplate);
 
     bar.load();

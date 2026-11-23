@@ -36,6 +36,11 @@ export function registerSettings() {
         hint: "Deal ongoing damage at the start of the creature's turn; burning and corrode get a Reflex save at the end of its turn (DC 10 + that round's damage); bleeding stops once the creature is healed.",
         scope: "world", config: true, type: Boolean, default: true
     });
+    reg("ammo", {
+        name: "Ammunition and limited uses",
+        hint: "Stop attacks with an empty weapon (Ctrl-click still attacks); thrown grenades leave the inventory and the next one is drawn; automatic mode spends two shots per creature, nearest first, and uses the rest; abilities with limited uses spend one when used.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
     reg("zeroHpConditions", {
         name: "Conditions at 0 HP",
         hint: "NPCs die (or fall unconscious from nonlethal) and are marked defeated; PCs become dying and unconscious (or unconscious and stable from nonlethal).",

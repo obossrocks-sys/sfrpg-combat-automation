@@ -10,6 +10,7 @@
  * saves are run on the GM's client.
  */
 import { itemEffectsData, itemCritData } from "./conditions.js";
+import { automaticAmmo, usesBefore, noUsesMessage, spendUse } from "./ammo.js";
 import { MODULE_ID, RESULT, KIND, ATTACK_OPTIONS } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { resolveTarget, naturalD20, pickAcKey, saveRangeWarning, hasFarShot } from "./rules.js";
@@ -489,6 +490,14 @@ async function areaAttackFlow(ctx, kind) {
     tokens = sortByDistance(tokens, attackerToken);
     if (getSetting("clearTargets")) clearTargets();
 
+    // Automatic mode's ammunition (layer 4): two shots per creature, nearest first, then the rest.
+    let ammo = null;
+    if (kind === KIND.AUTOMATIC) {
+        const plan = await automaticAmmo(item, tokens, attackerToken);
+        tokens = plan.tokens;
+        ammo = plan.info;
+    }
+
     // Blast: a d20 per creature at -2 (CRB 180). Line: one roll against every creature; only the
     // first can be crit (CRB 181). Automatic: a d20 per creature at the full-attack penalty, no crits.
     const nat0 = naturalD20(roll);
@@ -534,7 +543,7 @@ async function areaAttackFlow(ctx, kind) {
         cover, coverFromGm: !!ctx.coverFromGm, options: optionsUsed, nonlethal,
         properties: damageProperties(item),
         targets: results,
-        damage, mode
+        damage, mode, ammo
     });
 }
 
@@ -580,10 +589,17 @@ export function wrapItemRoll(original) {
             warnNoGM();
             return original.apply(this, args);
         }
+        const noUses = noUsesMessage(item);
+        if (noUses) {
+            ui.notifications.warn(noUses);
+            return null;
+        }
+        const uses = usesBefore(item);
         const actor = item.actor;
         const attackerToken = findAttackerToken(actor);
         const { cover, fromGm: coverFromGm } = bar.consumeCoverInfo();
         const result = await original.apply(this, args);
+        if (uses) await spendUse(item, uses).catch(err => console.error(`${MODULE_ID} |`, err));
         if (getSetting("clearTargets")) clearTargets();
         consumeTemplate(item);
         const type = itemSaveType(item);
@@ -640,6 +656,23 @@ async function chooseParts(item, idx) {
 
 /** Wrapper for ItemSFRPG.prototype.rollDamage (installed in main.js). */
 export function wrapRollDamage(original) {
+    const inner = rollDamageInner(original);
+    return async function (eventArg = {}, options = {}) {
+        // Layer 4: an ability with limited uses and no attack spends a use when its damage is rolled.
+        if (options?.rollMetadata?.scaWorkflowId || this.hasAttack) return inner.call(this, eventArg, options);
+        const msg = noUsesMessage(this);
+        if (msg) {
+            ui.notifications.warn(msg);
+            return null;
+        }
+        const uses = usesBefore(this);
+        const result = await inner.call(this, eventArg, options);
+        if (uses && result) await spendUse(this, uses).catch(err => console.error(`${MODULE_ID} |`, err));
+        return result;
+    };
+}
+
+function rollDamageInner(original) {
     return async function (eventArg = {}, options = {}) {
         const item = this;
         if (options?.rollMetadata?.scaWorkflowId) return original.call(this, eventArg, options);
