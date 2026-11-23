@@ -98,8 +98,7 @@ export const usesBefore = (item) => (on() ? usesOf(item) : null);
 /* ---------- grenades ---------- */
 
 /** After a throw: one fewer grenade; draw the next if there's one left. */
-async function afterGrenade(item, capBefore) {
-    if (ammoLeft(item) >= capBefore) return; // nothing was thrown (cancelled, or Ctrl)
+async function afterGrenade(item) {
     const qty = Math.max(0, (Number(item.system?.quantity) || 0) - 1);
     await item.update({ "system.quantity": qty, "system.capacity.value": qty > 0 ? Math.max(1, Number(item.system?.capacity?.max) || 1) : 0 });
     if (qty === 0) ui.notifications.info(`That was the last ${item.name}.`);
@@ -120,11 +119,21 @@ export function wrapRollAttack(original) {
             ui.notifications.warn(msg);
             return null;
         }
-        const capBefore = isGrenade(item) ? ammoLeft(item) : 0;
         const uses = usesBefore(item);
-        const result = await original.call(this, options);
+        // Did the attack roll? (sfrpg's capacity update may not have landed when it returns.)
+        let rolled = false;
+        const hookId = Hooks.on("attackRolled", (data) => {
+            if (data?.item === item || (data?.item?.id === item.id && data?.item?.parent === item.parent)) rolled = true;
+        });
+        let result;
         try {
-            if (isGrenade(item) && on() && !skip) await afterGrenade(item, capBefore);
+            result = await original.call(this, options);
+        } finally {
+            Hooks.off("attackRolled", hookId);
+        }
+        if (!rolled) return result;
+        try {
+            if (isGrenade(item) && on() && !skip) await afterGrenade(item);
             if (uses) await spendUse(item, uses);
         } catch (err) {
             console.error(`${MODULE_ID} |`, err);
