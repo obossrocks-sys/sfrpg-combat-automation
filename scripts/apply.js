@@ -92,10 +92,53 @@ function combatantsFor(tokenDoc) {
     return out;
 }
 
-async function setDefeated(actor, tokenDoc, on) {
-    for (const c of combatantsFor(tokenDoc)) await c.update({ defeated: on });
+/**
+ * Mark a creature dead (large dead icon) or lift it. With "Remove the dead from the combat
+ * tracker" on, killing deletes its combatants and returns them so Undo can put them back.
+ */
+async function setDefeated(actor, tokenDoc, on, removed = null) {
     const id = CONFIG.specialStatusEffects.DEFEATED;
+    let out = null;
+    if (on && getSetting("removeDead")) {
+        out = [];
+        for (const c of combatantsFor(tokenDoc)) {
+            out.push({ combatId: c.parent.id, data: c.toObject() });
+            await c.delete();
+        }
+    } else {
+        for (const c of combatantsFor(tokenDoc)) await c.update({ defeated: on });
+    }
+    if (!on && removed?.length) {
+        for (const r of removed) {
+            const combat = game.combats.get(r.combatId);
+            if (combat && !combat.combatants.has(r.data._id)) {
+                await combat.createEmbeddedDocuments("Combatant", [{ ...r.data, defeated: false }], { keepId: true });
+            }
+        }
+    }
     await actor.toggleStatusEffect(id, { overlay: true, active: on });
+    return out;
+}
+
+/**
+ * Anyone given the Dead status by hand (token HUD, the tracker's defeated toggle, a macro):
+ * show the large dead icon and, with "Remove the dead" on, delete their combatants.
+ * Runs on the active GM only. Unconscious and dying never trigger it.
+ */
+export async function onDeadStatus(effect) {
+    if (game.user !== game.users.activeGM) return;
+    const id = CONFIG.specialStatusEffects.DEFEATED;
+    if (!effect.statuses?.has?.(id)) return;
+    const actor = effect.parent;
+    if (!(actor instanceof Actor)) return;
+    if (!foundry.utils.getProperty(effect, "flags.core.overlay")) await effect.update({ "flags.core.overlay": true });
+    if (!getSetting("removeDead")) return;
+    for (const combat of game.combats ?? []) {
+        const ids = combat.combatants.filter(c => actor.isToken
+            ? c.tokenId === actor.token?.id
+            : (c.actorId === actor.id && c.token?.actorLink)).map(c => c.id);
+        if (ids.length) await combat.deleteEmbeddedDocuments("Combatant", ids);
+    }
 }
 
 function isDefeated(actor, tokenDoc) {
@@ -120,7 +163,7 @@ async function zeroHp(actor, tokenDoc, nonlethal, { before, incoming }) {
             added.label = "Inactive";
         } else if (incoming >= before.hpMax) {
             if (!isDefeated(actor, tokenDoc)) {
-                await setDefeated(actor, tokenDoc, true);
+                added.removed = await setDefeated(actor, tokenDoc, true);
                 added.defeated = true;
             }
             added.label = "Destroyed";
@@ -133,7 +176,7 @@ async function zeroHp(actor, tokenDoc, nonlethal, { before, incoming }) {
             added.label = "Unconscious";
         } else {
             if (!isDefeated(actor, tokenDoc)) {
-                await setDefeated(actor, tokenDoc, true);
+                added.removed = await setDefeated(actor, tokenDoc, true);
                 added.defeated = true;
             }
             added.label = "Dead";
@@ -206,6 +249,7 @@ export async function applyToTarget(wf, t, key, factor = 1) {
         const z = await zeroHp(actor, tokenDoc, wf.nonlethal, { before, incoming });
         applied.conditions = z.conditions;
         applied.defeated = z.defeated;
+        applied.removed = z.removed ?? null;
         applied.status = z.label;
     }
     t.applied = applied;
@@ -229,7 +273,7 @@ export async function undoTarget(t) {
         for (const name of [...ap.conditions].reverse()) {
             if (actor.hasCondition(name)) await actor.setCondition(name, false);
         }
-        if (ap.defeated) await setDefeated(actor, tokenDoc, false);
+        if (ap.defeated) await setDefeated(actor, tokenDoc, false, ap.removed);
     }
     t.applied = null;
 }
@@ -302,7 +346,15 @@ function setOutcome(wf, t, saved) {
  * Entry point on the GM's client for save effects, damage-only effects and explode weapons.
  * Posts the cards at once (rows show "Rolling…"), then resolves each target as its save comes in.
  */
+
+/** A player's attack used the GM's shared cover pick: clear it now that it has been spent. */
+async function spendGmCover(wf) {
+    if (!wf.coverFromGm || !game.user.isGM) return;
+    if ((game.settings.get(MODULE_ID, "gmCover") || "none") !== "none") await game.settings.set(MODULE_ID, "gmCover", "none");
+}
+
 export async function processSave(wf) {
+    await spendGmCover(wf);
     for (const t of wf.targets) {
         t.applied = null;
         t.flipped = false;
@@ -382,6 +434,7 @@ async function applyHits(wf) {
 
 /** Entry point on the GM's client for attacks (socketlib target). */
 export async function processAttack(wf) {
+    await spendGmCover(wf);
     const auto = getSetting("autoApply");
     for (const t of wf.targets) {
         t.applied = null;

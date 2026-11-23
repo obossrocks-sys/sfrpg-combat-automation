@@ -2,7 +2,7 @@ import { MODULE_ID } from "./constants.js";
 import { registerSettings, applyGmView } from "./settings.js";
 import { setupSocket, registerHandler } from "./socket.js";
 import { onAttackRolled, onDamageRolled, onPreCreateChatMessage, wrapRollDamage } from "./workflow.js";
-import { processAttack, processSave } from "./apply.js";
+import { processAttack, processSave, onDeadStatus } from "./apply.js";
 import { promptSave } from "./saves.js";
 import { onRenderChatMessage } from "./cards.js";
 import { wrapPlaceAbilityTemplate, onPreCreateTemplate, onCreateTemplate, onPreCreateRegion, onCreateRegion, explodeArea } from "./areas.js";
@@ -48,6 +48,7 @@ function start() {
     // Foundry v14 creates templates as Regions.
     on("preCreateRegion", onPreCreateRegion);
     on("createRegion", onCreateRegion);
+    on("createActiveEffect", (effect) => { onDeadStatus(effect).catch(err => console.error(`${MODULE_ID} |`, err)); });
     on("updateCombat", (combat, changed) => {
         if ("turn" in changed || "round" in changed) bar.onTurnChange();
     });

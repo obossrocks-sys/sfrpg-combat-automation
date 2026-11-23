@@ -39,7 +39,17 @@ export function registerSettings() {
     });
     reg("clearTargets", {
         name: "Clear targets after each attack",
+        hint: "Off: targets stay until the player changes them.",
+        scope: "world", config: true, type: Boolean, default: false
+    });
+    reg("removeDead", {
+        name: "Remove the dead from the combat tracker",
+        hint: "When a creature is marked dead (an NPC killed at 0 HP, or anyone given the Dead condition), delete its combatant and show the large dead icon on its token. Unconscious and dying creatures stay. Undo on the GM card puts the combatant back.",
         scope: "world", config: true, type: Boolean, default: true
+    });
+    reg("gmCover", {
+        scope: "world", config: false, type: String, default: "none",
+        onChange: () => game.modules.get(MODULE_ID)?.api?.bar?.render?.()
     });
     reg("rangePenalties", {
         name: "Range penalties",

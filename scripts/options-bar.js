@@ -25,12 +25,13 @@ class AttackBar {
         const saved = foundry.utils.deepClone(game.settings.get(MODULE_ID, "barState") ?? {});
         this.state.options = saved.options ?? {};
         this.state.collapsed = !!saved.collapsed;
+        this.state.pos = saved.pos ?? null;
         this.state.cover = "none";
         for (const k of Object.keys(ATTACK_OPTIONS)) this.#sync(k);
     }
 
     save() {
-        game.settings.set(MODULE_ID, "barState", { options: this.state.options, collapsed: this.state.collapsed });
+        game.settings.set(MODULE_ID, "barState", { options: this.state.options, collapsed: this.state.collapsed, pos: this.state.pos ?? null });
     }
 
     /** Hide the bar down to a small tab, or show it again (this user only; options stay as they are). */
@@ -60,19 +61,46 @@ class AttackBar {
         this.render();
     }
 
+    /** The GM's cover pick, shared with every client (a world setting only the GM writes). */
+    gmCover() {
+        try { return game.settings.get(MODULE_ID, "gmCover") || "none"; } catch (e) { return "none"; }
+    }
+
+    /** The cover the bar shows as picked: the GM's shared pick, or this user's own. */
+    shownCover() {
+        return game.user.isGM ? this.gmCover() : this.state.cover;
+    }
+
     setCover(c) {
+        if (game.user.isGM) {
+            // The GM rules on cover: the pick applies to the next attack or effect by anyone.
+            game.settings.set(MODULE_ID, "gmCover", this.gmCover() === c ? "none" : c);
+            return;
+        }
         this.state.cover = this.state.cover === c ? "none" : c;
         this.render();
     }
 
-    /** Read the cover for this attack and reset it. */
-    consumeCover() {
-        const c = this.state.cover;
-        if (c !== "none") {
+    /**
+     * Read the cover for this attack and reset it: the higher of this user's pick and the GM's
+     * shared pick. Returns { cover, fromGm } (the GM's client clears its shared pick when the
+     * attack or effect reaches it).
+     */
+    consumeCoverInfo() {
+        const own = this.state.cover, gm = this.gmCover();
+        const order = Object.keys(COVER);
+        const cover = order.indexOf(gm) > order.indexOf(own) ? gm : own;
+        const fromGm = gm !== "none" && cover === gm;
+        if (own !== "none") {
             this.state.cover = "none";
             this.render();
         }
-        return c;
+        if (fromGm && game.user.isGM) game.settings.set(MODULE_ID, "gmCover", "none");
+        return { cover, fromGm };
+    }
+
+    consumeCover() {
+        return this.consumeCoverInfo().cover;
     }
 
     clearModes() {
@@ -119,11 +147,11 @@ class AttackBar {
             this.el = document.createElement("div");
             this.el.id = "sca-bar";
             this.el.addEventListener("click", (ev) => this.#onClick(ev));
-            const anchor = document.getElementById("ui-bottom") ?? document.body;
-            const hotbar = document.getElementById("hotbar");
-            if (hotbar && hotbar.parentElement === anchor) anchor.insertBefore(this.el, hotbar);
-            else anchor.appendChild(this.el);
+            this.el.addEventListener("pointerdown", (ev) => this.#onGrip(ev));
+            this.el.addEventListener("dblclick", (ev) => { if (ev.target.closest(".sca-grip")) this.dock(); });
         }
+        this.#place();
+        const grip = `<span class="sca-grip" data-tooltip="Drag to move the bar anywhere; double-click to put it back under the hotbar"><i class="fa-solid fa-grip-vertical"></i></span>`;
         const collapsed = !!this.state.collapsed;
         this.el.classList.toggle("sca-collapsed", collapsed);
         const toggle = `<button type="button" class="sca-collapse" data-sca-collapse="1" data-tooltip="${collapsed ? "Show" : "Hide"} the attack-options bar"><i class="fa-solid fa-chevron-${collapsed ? "right" : "left"}"></i></button>`;
@@ -132,23 +160,78 @@ class AttackBar {
             const on = [
                 ...Object.entries(ATTACK_OPTIONS).filter(([k]) => this.isOn(k)).map(([, o]) => o.short),
                 ...(this.state.auto ? ["Auto"] : []),
-                ...(this.state.cover !== "none" ? [`${COVER[this.state.cover]?.short} cover`] : [])
+                ...(this.shownCover() !== "none" ? [`${COVER[this.shownCover()]?.short} cover`] : []),
+                ...(!game.user.isGM && this.gmCover() !== "none" ? [`GM: ${COVER[this.gmCover()]?.short} cover`] : [])
             ];
-            this.el.innerHTML = `${toggle}<span class="sca-label">Attack</span>${on.length ? `<span class="sca-on">${on.join(" · ")}</span>` : ""}`;
+            this.el.innerHTML = `${grip}${toggle}<span class="sca-label">Attack</span>${on.length ? `<span class="sca-on">${on.join(" · ")}</span>` : ""}`;
             return;
         }
         const opt = Object.entries(ATTACK_OPTIONS).map(([k, o]) =>
             `<button type="button" data-sca-opt="${k}" class="${this.isOn(k) ? "on" : ""}" data-tooltip="${o.label}: ${o.hint}">${o.short}</button>`
         ).join("");
         const cov = Object.entries(COVER).filter(([k]) => k !== "none").map(([k, c]) =>
-            `<button type="button" data-sca-cover="${k}" class="${this.state.cover === k ? "on" : ""}" data-tooltip="${c.label}, next attack or effect only">${c.short}</button>`
+            `<button type="button" data-sca-cover="${k}" class="${this.shownCover() === k ? "on" : ""}" data-tooltip="${c.label}, next attack or effect only${game.user.isGM ? " (anyone's)" : ""}">${c.short}</button>`
         ).join("");
         const gm = game.user.isGM
             ? `<span class="sca-sep"></span><button type="button" data-sca-gm="flatfooted" data-tooltip="Toggle flat-footed on the targeted tokens">Flat-footed</button>`
             : "";
         const mode = `<button type="button" data-sca-mode="1" data-tooltip="Modal weapons: pick the mode again on the next attack">Mode</button>`;
         const auto = `<button type="button" data-sca-auto="1" class="${this.state.auto ? "on" : ""}" data-tooltip="Automatic mode, next attack only: an automatic weapon fires at every creature in a cone of half its range increment, a d20 each at -4, no crits">Auto</button>`;
-        this.el.innerHTML = `${toggle}<span class="sca-label">Attack</span>${opt}${auto}${mode}<span class="sca-sep"></span><span class="sca-label">Cover</span>${cov}${gm}`;
+        const gmPick = !game.user.isGM && this.gmCover() !== "none"
+            ? `<span class="sca-gmcover" data-tooltip="The GM set cover for the next attack or effect">GM: ${COVER[this.gmCover()]?.short}</span>` : "";
+        this.el.innerHTML = `${grip}${toggle}<span class="sca-label">Attack</span>${opt}${auto}${mode}<span class="sca-sep"></span><span class="sca-label">Cover</span>${cov}${gmPick}${gm}`;
+    }
+
+    /** Dock under the hotbar, or float at the saved spot (kept inside the window). */
+    #place() {
+        const el = this.el, pos = this.state.pos;
+        if (pos) {
+            if (el.parentElement !== document.body) document.body.appendChild(el);
+            el.classList.add("sca-float");
+            const w = el.offsetWidth || 300, h = el.offsetHeight || 30;
+            const x = Math.max(0, Math.min(window.innerWidth - Math.min(w, window.innerWidth), pos.x));
+            const y = Math.max(0, Math.min(window.innerHeight - h, pos.y));
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            return;
+        }
+        el.classList.remove("sca-float");
+        el.style.left = el.style.top = "";
+        const anchor = document.getElementById("ui-bottom") ?? document.body;
+        const hotbar = document.getElementById("hotbar");
+        if (el.parentElement === anchor) return;
+        if (hotbar && hotbar.parentElement === anchor) anchor.insertBefore(el, hotbar);
+        else anchor.appendChild(el);
+    }
+
+    /** Put the bar back under the hotbar. */
+    dock() {
+        this.state.pos = null;
+        this.save();
+        this.render();
+    }
+
+    /** Drag by the grip; the spot is saved for this user. */
+    #onGrip(ev) {
+        if (ev.button !== 0 || !ev.target.closest(".sca-grip")) return;
+        ev.preventDefault();
+        const el = this.el, r = el.getBoundingClientRect();
+        const dx = ev.clientX - r.left, dy = ev.clientY - r.top;
+        if (!this.state.pos) {
+            this.state.pos = { x: r.left, y: r.top };
+            this.#place();
+        }
+        const move = (e) => {
+            this.state.pos = { x: e.clientX - dx, y: e.clientY - dy };
+            this.#place();
+        };
+        const up = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            this.save();
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
     }
 
     async #onClick(ev) {

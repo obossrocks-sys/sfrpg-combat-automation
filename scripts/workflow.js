@@ -339,7 +339,7 @@ export async function onAttackRolled({ actor, item, roll, rollMetadata }) {
     const ctx = {
         actor, item, roll, targets, autoMode,
         attackerToken: findAttackerToken(actor),
-        cover: bar.consumeCover(),
+        ...(({ cover, fromGm }) => ({ cover, coverFromGm: fromGm }))(bar.consumeCoverInfo()),
         optionsUsed: bar.activeOptionKeys()
     };
     ctx.nonlethal = !!item.system?.properties?.nonlethal?.value || ctx.optionsUsed.includes("nonlethal");
@@ -385,7 +385,7 @@ async function attackFlowLayer1(ctx) {
         attacker: attackerData(actor, attackerToken),
         item: itemData(item),
         attack: { total: roll.total, nat: naturalD20(roll), formula: roll.formula, acKey: pickAcKey(item) },
-        cover, options: optionsUsed, nonlethal,
+        cover, coverFromGm: !!ctx.coverFromGm, options: optionsUsed, nonlethal,
         properties: damageProperties(item),
         targets: results,
         damage, mode, rider
@@ -464,7 +464,7 @@ async function explodeFlow(ctx) {
         attack: { total: roll.total, nat, eff, penalty: range?.penalty ?? 0, distance, hit, notes },
         scatter: scattered,
         save,
-        cover, options: optionsUsed, nonlethal,
+        cover, coverFromGm: !!ctx.coverFromGm, options: optionsUsed, nonlethal,
         properties: damageProperties(item),
         targets, damage
     });
@@ -528,7 +528,7 @@ async function areaAttackFlow(ctx, kind) {
         item: itemData(item),
         attack: { total: roll.total, nat: nat0, formula: roll.formula, acKey: pickAcKey(item), penalty },
         area: { t: spec.t, distance: spec.distance },
-        cover, options: optionsUsed, nonlethal,
+        cover, coverFromGm: !!ctx.coverFromGm, options: optionsUsed, nonlethal,
         properties: damageProperties(item),
         targets: results,
         damage, mode
@@ -602,7 +602,7 @@ export function wrapRollDamage(original) {
         // Capture synchronously.
         const actor = item.actor;
         const attackerToken = findAttackerToken(actor);
-        const cover = bar.consumeCover();
+        const { cover, fromGm: coverFromGm } = bar.consumeCoverInfo();
         let mode = null;
         if (useIdx.length > 1) {
             const pick = await chooseParts(item, useIdx);
@@ -661,7 +661,7 @@ export function wrapRollDamage(original) {
             time: Date.now(),
             attacker: attackerData(actor, attackerToken),
             item: itemData(item),
-            save, cover, options: [],
+            save, cover, coverFromGm, options: [],
             nonlethal: !!item.system?.properties?.nonlethal?.value,
             properties: damageProperties(item),
             targets: out,

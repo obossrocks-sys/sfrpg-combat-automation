@@ -61,3 +61,9 @@ body.sca-hide-public .chat-message.sca-public-msg { display: none; }
 .sca-card .sca-share { display: flex; gap: 4px; }
 .sca-card .sca-row .sca-status { margin-left: 2px; }
 .sca-save-prompt .sca-hint { font-size: 0.85em; opacity: 0.75; }
+
+#sca-bar.sca-float { position: fixed; z-index: 70; margin: 0; max-width: calc(100vw - 8px); }
+#sca-bar .sca-grip { cursor: grab; color: #888; padding: 0 3px; touch-action: none; }
+#sca-bar .sca-grip:hover { color: #eee; }
+#sca-bar .sca-grip i { pointer-events: none; font-size: 12px; }
+#sca-bar .sca-gmcover { margin-left: 4px; padding: 0 5px; border-radius: 3px; background: #b8860b; color: #111; font-weight: bold; font-size: 11px; }
