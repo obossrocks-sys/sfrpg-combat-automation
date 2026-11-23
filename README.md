@@ -50,8 +50,18 @@ sfrpg already spends a weapon's usage on each attack, refills on Reload, and spe
 - **Grenades leave the inventory:** a throw takes one from the quantity and draws the next if any are left; with none left, the grenade can't be thrown.
 - **Automatic mode** (CRB 180): two shots' worth per creature, nearest first (ties at the cut picked at random), stopping when the ammunition can't pay for the next creature; the attack uses all the remaining ammunition. The GM card shows what was loaded and who wasn't attacked; the public card names them.
 - **Abilities with limited uses** (feats) that attack or roll damage spend a use, and can't be used with none left. Consumables and other gear stay with sfrpg's Use button.
-- **Player characters and drones only** (0.4.1): sfrpg NPCs don't track ammunition (a weapon dragged onto an NPC usually sits at 0 charges), so NPC ammo and uses stay with the GM.
+- **Who it tracks:** player characters, drones and armed NPCs (0.5.0, below). An NPC the module never armed keeps firing as sfrpg lets it.
 - Setting: **Ammunition and limited uses** (world, on).
+
+## NPC ammunition (0.5.0)
+NPCs follow the players' ammunition rules. sfrpg keeps most Alien Archive NPC weapons' charges on the weapon with the ammunition type cleared (so its Reload refills them for free); the module gives them real ammunition instead.
+- **Armed when placed:** when an NPC's token is created, the active GM's client arms it: each weapon gets its ammunition type back from the compendium weapon of the same name, and a full battery, tank or magazine of rounds is loaded into it as a real ammunition item. Grenades are drawn. Unlinked tokens keep their own count; a linked token arms its actor once. The actors in the sidebar aren't touched.
+- **Spares:** the ammunition the stat block lists as goods ("Battery, Standard", "2 High-Capacity Batteries (40 Charges Each)", "10 Sniper Rounds") becomes real ammunition items; with none listed, 2 spare loads for small arms, longarms and sniper weapons, 1 for others.
+- **Empty NPC weapon:** with a spare that fits, the GM is asked "Reload?": **Reload (move action)** reloads with sfrpg's own Reload (its card says "Cost: Move Action") and the attack goes ahead; **Leave it empty** stops the attack. With no spare, the attack stops with a notice for the GM. Ctrl-click attacks anyway.
+- **Unlimited:** integrated weapons (an "Integrated Weapons" ability, or a weapon named "Integrated ...") and natural attacks aren't tracked. A weapon with no matching ammunition item keeps its charges on the weapon (filled at arming, no spares).
+- **Looting** the body shows the loaded magazine's charges, the spent batteries and the unspent spares; they work in a player's weapon as any other ammunition.
+- **Already placed NPCs:** `SFRPGCombatAutomation.npcAmmo.armPlaced({ dryRun: true })` lists what arming every placed NPC would do (scenes in a "Dev" folder skipped); `{ dryRun: false }` does it. A weapon given to an armed NPC later is armed when it's added.
+- Setting: **NPC ammunition** (world, on; needs Ammunition and limited uses).
 
 ## Attack-options bar
 A small bar above the hotbar, per user and sticky: Full attack (clears when the turn passes), Flanking, Nonlethal, Fight defensively, Charge, Harrying fire. Each drives one of sfrpg's own global attack modifiers (`CONFIG.SFRPG.globalAttackRollModifiers`, found by `_id`), so the quick roll includes it. Auto turns on automatic mode for the next attack; Mode makes modal weapons ask for their mode again (double weapons ask every attack). Cover (partial, cover, improved, total) applies to the next attack or effect only. GMs also get a Flat-footed button that toggles sfrpg's condition on the targeted tokens.
@@ -77,6 +87,7 @@ Automate targeted attacks; roll damage on a hit; apply damage automatically (off
 - `scripts/effects.js`: layer 3's pure rules (reading conditions and durations, the critical hit effects, immunities, the round clock), unit-tested.
 - `scripts/conditions.js`: layer 3 on Foundry (applying and removing conditions, ongoing damage, the end-of-duration clock).
 - `scripts/ammo.js`: layer 4 (the empty-weapon check, grenades, automatic mode's ammunition, ability uses).
+- `scripts/npc-ammo.js`: NPC ammunition (arming, the reload prompt, the pass over placed tokens); `scripts/npc-ammo-logic.js`: its pure part (unit-tested).
 - `scripts/cards.js`: the public card and the GM card, button wiring.
 - `scripts/options-bar.js`: the bar.
 - `scripts/socket.js`, `scripts/settings.js`, `scripts/constants.js`.
