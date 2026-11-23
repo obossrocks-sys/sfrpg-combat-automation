@@ -36,17 +36,25 @@ sfrpg's own "Targets: KAC 22 - HIT" tag on the attack roll is removed when the m
 - **Damage-only effects** (no attack and no save): full damage to the targets.
 - **Hidden DCs:** module cards show Saved or Failed only; DCs are removed from NPC item cards and roll titles before they're posted. The GM card shows the DC and how it was worked out.
 
+## Conditions and critical hits (layer 3, 0.3.0)
+- **Where the conditions come from:** sfrpg's own data, for any world. An explode weapon or grenade uses its effect line (`chatFlavor`: "blinded 1d4 rounds", "burning 1d4", "deafened 1d4 minutes"); a spell or ability uses the condition links in its description, with the item's duration (hold person: caster level in rounds). A grenade that names staggered with no duration (riot, cryo) gets 1 round, as the staggered critical effect.
+- **When:** a failed save (natural 1 fails, as always), or a failed rider save on an attack. Spells and abilities with a save and no damage (daze, hold person) now run when used from the sheet with targets set: each target saves, and a failure gets the condition.
+- **Critical hit effects** (CRB 182-183, Armory 26), rolled on a crit or for the creature nearest an explode crit: staggered, blind, deafen, sicken, nauseate, confuse, fatigue and leech with their saves (DC 10 + half item level + Dex or Str, less the attack's penalties); stunned and knockdown with no save; bind (entangled until it escapes, escape DCs on the GM card); burn, bleed and corrode as ongoing damage; arc to the creature nearest the target within 10 ft (ties and jet: the GM picks on the card); pulse to everyone adjacent; wound and severe wound roll their d20 for CRB Table 7-1; push, injection, demoralize, irradiate, embed, suffocate and stifle are shown to the GM with the DC.
+- **Durations end on their own** (round effects end just before the turn of whoever caused them, in the last round; minutes count 10 rounds; out of combat, world time). Durations are rolled once per effect. A condition already set by hand is left alone; the same condition from a second effect runs to whichever end is later. Immunities: the creature's condition immunities, and undead and constructs against stun, paralysis, sleep, bleed and disease.
+- **Ongoing damage:** burning, bleeding and corrode deal their damage at the start of the creature's turn (DR, ER and 0 HP as any hit). Burning and corrode get a Reflex save at the end of its turn (DC 10 + that turn's damage); bleeding stops once the creature has been healed.
+- **The cards:** the public card shows the conditions and their length; the GM card adds the saves and DCs, **Remove conditions** (per target, keeps the damage) and pick buttons for arc ties and jet. Undo and the flips take conditions back with the damage.
+
 ## Attack-options bar
 A small bar above the hotbar, per user and sticky: Full attack (clears when the turn passes), Flanking, Nonlethal, Fight defensively, Charge, Harrying fire. Each drives one of sfrpg's own global attack modifiers (`CONFIG.SFRPG.globalAttackRollModifiers`, found by `_id`), so the quick roll includes it. Auto turns on automatic mode for the next attack; Mode makes modal weapons ask for their mode again (double weapons ask every attack). Cover (partial, cover, improved, total) applies to the next attack or effect only. GMs also get a Flat-footed button that toggles sfrpg's condition on the targeted tokens.
 
 ## Left alone
-No targets: plain sfrpg (area weapons open the template preview instead). No GM connected: plain sfrpg, with a warning. Starship and vehicle attacks. Healing. Saves with no damage (conditions are layer 3). sfrpg's right-click apply still works for manual cases.
+No targets: plain sfrpg (area weapons open the template preview instead). No GM connected: plain sfrpg, with a warning. Starship and vehicle attacks. Healing. Effects whose result isn't a condition (incompetence's lost proficiency, overload's text) stay with the GM. sfrpg's right-click apply still works for manual cases.
 
 ## The bar (0.2.2)
 Drag the grip at its left end to move it anywhere; the spot is saved per user. Double-click the grip to put it back under the hotbar. **Cover picked by the GM applies to the next attack or effect by anyone** (players see "GM: Cover" on their bar); a player's own pick applies to their own next attack. The higher of the two counts.
 
 ## Settings
-Automate targeted attacks; roll damage on a hit; apply damage automatically (off: the GM card shows Apply); conditions at 0 HP; hide the system's AC tag; **GM sees only the GM card** (hides the public card on GM screens; on by default); clear targets after each attack (off by default since 0.2.2: targets stay until the player changes them); **remove the dead from the combat tracker** (0.2.2; on); range penalties; show the bar (per user). Layer 2: automate saves; area attack weapons; templates target tokens; player saves (prompt or GM) and the prompt timeout; spell resistance checks; damage-only effects hit targets; hide save DCs from players.
+Automate targeted attacks; roll damage on a hit; apply damage automatically (off: the GM card shows Apply); conditions at 0 HP; hide the system's AC tag; **GM sees only the GM card** (hides the public card on GM screens; on by default); clear targets after each attack (off by default since 0.2.2: targets stay until the player changes them); **remove the dead from the combat tracker** (0.2.2; on); **conditions from failed saves, critical hit effects, burning/bleeding/corrode each turn** (0.3.0; all on); range penalties; show the bar (per user). Layer 2: automate saves; area attack weapons; templates target tokens; player saves (prompt or GM) and the prompt timeout; spell resistance checks; damage-only effects hit targets; hide save DCs from players.
 
 ## Files
 - `module.json`: manifest (requires socketlib).
@@ -57,6 +65,8 @@ Automate targeted attacks; roll damage on a hit; apply damage automatically (off
 - `scripts/areas.js`: templates and their items, placement, tokens in an area, scatter.
 - `scripts/saves.js`: DCs, who rolls, the player prompt, Evasion, spell resistance.
 - `scripts/apply.js`: the GM's side (apply, shares, saves, line stop, riders, nonlethal, 0 HP and drones, undo, flips).
+- `scripts/effects.js`: layer 3's pure rules (reading conditions and durations, the critical hit effects, immunities, the round clock), unit-tested.
+- `scripts/conditions.js`: layer 3 on Foundry (applying and removing conditions, ongoing damage, the end-of-duration clock).
 - `scripts/cards.js`: the public card and the GM card, button wiring.
 - `scripts/options-bar.js`: the bar.
 - `scripts/socket.js`, `scripts/settings.js`, `scripts/constants.js`.
