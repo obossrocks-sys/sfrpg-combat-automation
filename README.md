@@ -42,8 +42,11 @@ A small bar above the hotbar, per user and sticky: Full attack (clears when the 
 ## Left alone
 No targets: plain sfrpg (area weapons open the template preview instead). No GM connected: plain sfrpg, with a warning. Starship and vehicle attacks. Healing. Saves with no damage (conditions are layer 3). sfrpg's right-click apply still works for manual cases.
 
+## The bar (0.2.2)
+Drag the grip at its left end to move it anywhere; the spot is saved per user. Double-click the grip to put it back under the hotbar. **Cover picked by the GM applies to the next attack or effect by anyone** (players see "GM: Cover" on their bar); a player's own pick applies to their own next attack. The higher of the two counts.
+
 ## Settings
-Automate targeted attacks; roll damage on a hit; apply damage automatically (off: the GM card shows Apply); conditions at 0 HP; hide the system's AC tag; **GM sees only the GM card** (hides the public card on GM screens; on by default); clear targets after each attack; range penalties; show the bar (per user). Layer 2: automate saves; area attack weapons; templates target tokens; player saves (prompt or GM) and the prompt timeout; spell resistance checks; damage-only effects hit targets; hide save DCs from players.
+Automate targeted attacks; roll damage on a hit; apply damage automatically (off: the GM card shows Apply); conditions at 0 HP; hide the system's AC tag; **GM sees only the GM card** (hides the public card on GM screens; on by default); clear targets after each attack (off by default since 0.2.2: targets stay until the player changes them); **remove the dead from the combat tracker** (0.2.2; on); range penalties; show the bar (per user). Layer 2: automate saves; area attack weapons; templates target tokens; player saves (prompt or GM) and the prompt timeout; spell resistance checks; damage-only effects hit targets; hide save DCs from players.
 
 ## Files
 - `module.json`: manifest (requires socketlib).
