@@ -207,7 +207,8 @@ export async function applyToTarget(wf, t, key, factor = 1) {
     if (wf.saveOnly) return; // conditions only: layer 3 handles them
     const sections = wf.damage?.[key] ?? [];
     if (!sections.length) {
-        t.note = "no damage rolled";
+        // A grenade or effect with no damage (stickybomb, flash): nothing to say.
+        if (wf.item?.hasDamage) t.note = "no damage rolled";
         return;
     }
     const { tokenDoc, actor } = await targetActor(t);
