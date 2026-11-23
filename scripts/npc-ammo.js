@@ -210,7 +210,7 @@ export async function applyPlan(plan) {
             : { _id: t.id, "system.quantity": w.capMax });
     }
     if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
-    await actor.update({ [`flags.${MODULE_ID}.${FLAG}`]: { armed: true, version: 1 } });
+    await actor.update({ [`flags.${MODULE_ID}.${FLAG}.armed`]: true, [`flags.${MODULE_ID}.${FLAG}.version`]: 1 });
     return plan;
 }
 
@@ -224,13 +224,24 @@ export async function armActor(actor, { dryRun = false } = {}) {
 
 const isActiveGM = () => game.users?.activeGM?.id === game.user?.id;
 
+/**
+ * Two tabs logged in as the same GM both see the hook: each writes its own lock, waits for the
+ * writes to settle, and only the tab whose lock stuck goes on.
+ */
+async function takeLock(actor) {
+    const lock = foundry.utils.randomID();
+    await actor.update({ [`flags.${MODULE_ID}.${FLAG}.lock`]: lock });
+    await new Promise(r => setTimeout(r, 500));
+    return actor.flags?.[MODULE_ID]?.[FLAG]?.lock === lock;
+}
+
 /** createToken: arm a newly placed NPC. */
 export async function onCreateToken(tokenDoc) {
     if (!npcOn() || !isActiveGM()) return;
     const actor = tokenDoc?.actor;
     if (!isNpc(actor) || isArmed(actor)) return;
     try {
-        await armActor(actor);
+        if (await takeLock(actor) && !isArmed(actor)) await armActor(actor);
     } catch (err) {
         console.error(`${MODULE_ID} | arming ${actor?.name}`, err);
     }
@@ -242,7 +253,7 @@ export async function onCreateItem(item, options, userId) {
     const actor = item.actor;
     if (!isNpc(actor) || !isArmed(actor) || weaponFlag(item)) return;
     try {
-        await armActor(actor);
+        if (await takeLock(actor) && !weaponFlag(actor.items.get(item.id))) await armActor(actor);
     } catch (err) {
         console.error(`${MODULE_ID} | arming ${item.name}`, err);
     }
