@@ -16,6 +16,7 @@
 import { MODULE_ID } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { tokenDistance } from "./rules.js";
+import { isNpc, isArmed, npcOn, weaponFlag, npcSpare, askReload, reloadNow, noSpareMessage } from "./npc-ammo.js";
 
 const on = () => {
     try {
@@ -26,10 +27,24 @@ const on = () => {
 };
 
 /**
- * Only player characters and drones track ammunition and uses. sfrpg NPCs don't (a weapon dragged
- * onto an NPC usually sits at 0 charges with its ammo type cleared), so NPC ammo stays the GM's.
+ * Who tracks ammunition and uses: player characters and drones, and (0.5.0) NPCs armed by the
+ * module (npc-ammo.js): their armed weapons and grenades and their abilities. An NPC that was never
+ * armed, an integrated weapon and a weapon added outside the module stay the GM's.
  */
-const tracked = (item) => ["character", "drone"].includes(item?.actor?.type);
+const tracked = (item) => {
+    const actor = item?.actor;
+    if (["character", "drone"].includes(actor?.type)) return true;
+    if (!isNpc(actor) || !npcOn() || !isArmed(actor)) return false;
+    if (item.type !== "weapon") return true;
+    const f = weaponFlag(item);
+    return !!f && f.mode !== "unlimited";
+};
+
+/** An armed NPC's weapon that can't pay for the shot (not a grenade). */
+function npcEmpty(item) {
+    if (!isNpc(item?.actor) || !tracked(item) || isGrenade(item) || !usesAmmo(item)) return false;
+    return ammoLeft(item) < usageOf(item);
+}
 
 export const isGrenade = (item) => item?.type === "weapon" && item.system?.weaponType === "grenade";
 
@@ -120,6 +135,19 @@ export function wrapRollAttack(original) {
             msg = (skip ? null : emptyMessage(item)) ?? noUsesMessage(item);
         } catch (err) {
             console.warn(`${MODULE_ID} |`, err);
+        }
+        // An NPC's empty weapon: the GM decides whether it spends its move action reloading.
+        if (msg && !skip && npcEmpty(item)) {
+            try {
+                const spare = npcSpare(item);
+                if (!spare) msg = noSpareMessage(item);
+                else if (await askReload(item, spare, ammoLeft(item), usageOf(item))) {
+                    await reloadNow(item, spare, usageOf(item));
+                    msg = emptyMessage(item) ?? noUsesMessage(item);
+                } else msg = `${item.name} left empty; no attack.`;
+            } catch (err) {
+                console.error(`${MODULE_ID} |`, err);
+            }
         }
         if (msg) {
             ui.notifications.warn(msg);

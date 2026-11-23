@@ -41,6 +41,11 @@ export function registerSettings() {
         hint: "Stop attacks with an empty weapon (Ctrl-click still attacks); thrown grenades leave the inventory and the next one is drawn; automatic mode spends two shots per creature, nearest first, and uses the rest; abilities with limited uses spend one when used.",
         scope: "world", config: true, type: Boolean, default: true
     });
+    reg("npcAmmo", {
+        name: "NPC ammunition",
+        hint: "Arm NPCs when their tokens are placed: each weapon gets its ammunition type back from the compendium and a full battery or magazine loaded; spares are the stat block's ammunition (or 2 loads for small arms, longarms and sniper weapons, 1 for others) as real items to loot. Their ammunition is then tracked like the players' (needs Ammunition and limited uses on); an empty NPC weapon asks the GM whether to reload, a move action.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
     reg("zeroHpConditions", {
         name: "Conditions at 0 HP",
         hint: "NPCs die (or fall unconscious from nonlethal) and are marked defeated; PCs become dying and unconscious (or unconscious and stable from nonlethal).",

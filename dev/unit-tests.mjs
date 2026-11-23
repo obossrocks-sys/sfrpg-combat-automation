@@ -7,6 +7,7 @@ import {
     saveSucceeds, saveEffect, damageFactor, scaled, rangePenaltyFor, scatterStep, compass,
     feetIn, areaSpec, stripDCs, isAbilityDamagePart, isHealingPart, partName, mindImmune
 } from "../scripts/logic.js";
+import { norm, matchWeapon, isIntegrated, pickAmmo, packOfSize, defaultSpareLoads, parseGoodsAmmo, spareFits } from "../scripts/npc-ammo-logic.js";
 import { parseEffectText, linkedConditions, effectsFromItem, spellDurationField, parseCrit, critSaveDC, immuneTo, roundsIn, isDue, durationLabel, allowsNewSave } from "../scripts/effects.js";
 
 let passed = 0;
@@ -199,5 +200,48 @@ test("due at the origin's turn", () => assert.equal(isDue({ round: 3, turn: 2 },
 test("not due before it", () => assert.equal(isDue({ round: 3, turn: 2 }, { round: 3, turn: 1 }), false));
 test("due in a later round", () => assert.equal(isDue({ round: 3, turn: 2 }, { round: 4, turn: 0 }), true));
 test("duration label", () => assert.equal(durationLabel(1, "round"), "1 round"));
+
+// NPC ammunition (0.5.0)
+const PW = [{ name: "Zero pistol, frostbite-class" }, { name: "Zero rifle, hailstorm-class" }, { name: "Arc caster, static" }, { name: "Laser pistol, azimuth" }];
+const AM = [
+    { name: "Battery", ammunitionType: "charge", useCapacity: true, capacityMax: 20, level: 1, quantity: 1 },
+    { name: "Battery, High-Capacity", ammunitionType: "charge", useCapacity: true, capacityMax: 40, level: 4, quantity: 1 },
+    { name: "Kishalee Battery, High-Capacity", ammunitionType: "charge", useCapacity: true, capacityMax: 40, level: 6, quantity: 1 },
+    { name: "Battery, Ultra-Capacity", ammunitionType: "charge", useCapacity: true, capacityMax: 100, level: 5, quantity: 1 },
+    { name: "Rounds, Small Arm", ammunitionType: "roundS", useCapacity: false, capacityMax: 0, level: 1, quantity: 30 },
+    { name: "Explosive, Rounds, Small Arms", ammunitionType: "roundS", useCapacity: false, capacityMax: 0, level: 2, quantity: 30 },
+    { name: "Tactical missile", ammunitionType: "missile", useCapacity: false, capacityMax: 0, level: 10, quantity: 1 },
+    { name: "Advanced missile", ammunitionType: "missile", useCapacity: false, capacityMax: 0, level: 13, quantity: 1 }
+];
+test("norm drops parentheticals", () => assert.equal(norm("Arc caster, static (plus First Arc 1d6)"), "arccasterstatic"));
+test("weapon exact", () => assert.equal(matchWeapon("Laser pistol, azimuth", PW).name, "Laser pistol, azimuth"));
+test("weapon with prefix", () => assert.equal(matchWeapon("Underwater Zero Pistol, Frostbite-Class", PW).name, "Zero pistol, frostbite-class"));
+test("weapon with missing hyphen", () => assert.equal(matchWeapon("Zero rifle, hailstorm class", PW).name, "Zero rifle, hailstorm-class"));
+test("weapon with note", () => assert.equal(matchWeapon("Arc caster, static (plus First Arc 1d6)", PW).name, "Arc caster, static"));
+test("weapon unknown", () => assert.equal(matchWeapon("Trailblazer Tactical Semi-Auto Pistol", PW), null));
+test("integrated by name", () => assert.equal(isIntegrated("Integrated Laser Rifle, aphelion"), true));
+test("integrated by feat", () => assert.equal(isIntegrated("Zero rifle", ["Integrated Weapons (Ex)"]), true));
+test("integrated tools aren't weapons", () => assert.equal(isIntegrated("Zero rifle", ["Integrated Tools (Ex)"]), false));
+test("battery for 20", () => assert.equal(pickAmmo("charge", 20, AM).name, "Battery"));
+test("battery for 40", () => assert.equal(pickAmmo("charge", 40, AM).name, "Battery, High-Capacity"));
+test("battery for 100", () => assert.equal(pickAmmo("charge", 100, AM).name, "Battery, Ultra-Capacity"));
+test("no battery fits 10", () => assert.equal(pickAmmo("charge", 10, AM), null));
+test("plain rounds", () => assert.equal(pickAmmo("roundS", 9, AM).name, "Rounds, Small Arm"));
+test("tactical missile", () => assert.equal(pickAmmo("missile", 1, AM).name, "Tactical missile"));
+test("pack of size 40", () => assert.equal(packOfSize("charge", 40, AM).name, "Battery, High-Capacity"));
+test("spare loads", () => assert.deepEqual(["smallA", "longA", "sniper", "heavy", "advancedM"].map(defaultSpareLoads), [2, 2, 2, 1, 1]));
+test("goods: batteries", () => assert.deepEqual(parseGoodsAmmo("2 High-Capacity Batteries (40 Charges Each", 1), { type: "charge", size: 40, count: 2 }));
+test("goods: battery standard", () => assert.deepEqual(parseGoodsAmmo("Battery, Standard", 1), { type: "charge", size: 20, count: 1 }));
+test("goods: 1 battery (20 charges)", () => assert.deepEqual(parseGoodsAmmo("1 Battery (20 Charges)", 1), { type: "charge", size: 20, count: 1 }));
+test("goods: magazines", () => assert.deepEqual(parseGoodsAmmo("4 Magazines (100 Longarm Rounds", 1), { type: "roundL", rounds: 100 }));
+test("goods: sniper rounds", () => assert.deepEqual(parseGoodsAmmo("10 Sniper Rounds", 1), { type: "roundL", rounds: 10 }));
+test("goods: long-arm", () => assert.deepEqual(parseGoodsAmmo("24 Long-arm Rounds", 1), { type: "roundL", rounds: 24 }));
+test("goods: plain rounds", () => assert.deepEqual(parseGoodsAmmo("15 Rounds", 1), { type: null, rounds: 15 }));
+test("goods: a box", () => assert.deepEqual(parseGoodsAmmo("Rounds, Small Arm", 2), { type: "roundS", rounds: null, packs: 2 }));
+test("goods: not ammo", () => assert.equal(parseGoodsAmmo("Credstick (500 credits)", 1), null));
+test("spare battery fits", () => assert.equal(spareFits({ ammunitionType: "charge", useCapacity: true, current: 20, capacityMax: 20 }, { ammunitionType: "charge", current: 0, capacityMax: 20 }), true));
+test("spare battery too big", () => assert.equal(spareFits({ ammunitionType: "charge", useCapacity: true, current: 40, capacityMax: 40 }, { ammunitionType: "charge", current: 0, capacityMax: 20 }), false));
+test("spent battery isn't a spare", () => assert.equal(spareFits({ ammunitionType: "charge", useCapacity: true, current: 0, capacityMax: 20 }, { ammunitionType: "charge", current: 0, capacityMax: 20 }), false));
+test("rounds of another type", () => assert.equal(spareFits({ ammunitionType: "roundL", useCapacity: false, current: 25 }, { ammunitionType: "roundS", current: 0, capacityMax: 9 }), false));
 
 console.log(`${passed} passed${process.exitCode ? ", some failed" : ""}`);

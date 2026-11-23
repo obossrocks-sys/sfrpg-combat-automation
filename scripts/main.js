@@ -6,6 +6,7 @@ import { processAttack, processSave, onDeadStatus } from "./apply.js";
 import { onCombatTurn, onCombatEnd, onWorldTime } from "./conditions.js";
 import * as effects from "./effects.js";
 import { wrapRollAttack } from "./ammo.js";
+import * as npcAmmo from "./npc-ammo.js";
 import { promptSave } from "./saves.js";
 import { onRenderChatMessage } from "./cards.js";
 import { wrapPlaceAbilityTemplate, onPreCreateTemplate, onCreateTemplate, onPreCreateRegion, onCreateRegion, explodeArea } from "./areas.js";
@@ -58,6 +59,8 @@ function start() {
     });
     on("deleteCombat", (combat) => { onCombatEnd(combat).catch(err => console.error(`${MODULE_ID} |`, err)); });
     on("updateWorldTime", onWorldTime);
+    on("createToken", (doc) => { npcAmmo.onCreateToken(doc).catch(err => console.error(`${MODULE_ID} |`, err)); });
+    on("createItem", (item, options, userId) => { npcAmmo.onCreateItem(item, options, userId).catch(err => console.error(`${MODULE_ID} |`, err)); });
 
     const itemProto = CONFIG.Item.documentClass?.prototype;
     patch(itemProto, "rollDamage", wrapRollDamage);
@@ -69,7 +72,7 @@ function start() {
     bar.render();
     applyGmView();
 
-    const api = { bar, rules, logic, effects, explodeArea, teardown, version: game.modules.get(MODULE_ID)?.version };
+    const api = { bar, rules, logic, effects, explodeArea, npcAmmo, teardown, version: game.modules.get(MODULE_ID)?.version };
     globalThis.SFRPGCombatAutomation = api;
     const mod = game.modules.get(MODULE_ID);
     if (mod) mod.api = api;
