@@ -1,7 +1,7 @@
 import { MODULE_ID } from "./constants.js";
 import { registerSettings, applyGmView } from "./settings.js";
 import { setupSocket, registerHandler } from "./socket.js";
-import { onAttackRolled, onDamageRolled, onPreCreateChatMessage, wrapRollDamage } from "./workflow.js";
+import { onAttackRolled, onDamageRolled, onPreCreateChatMessage, wrapRollDamage, wrapItemRoll } from "./workflow.js";
 import { processAttack, processSave, onDeadStatus } from "./apply.js";
 import { onCombatTurn, onCombatEnd, onWorldTime } from "./conditions.js";
 import * as effects from "./effects.js";
@@ -60,6 +60,7 @@ function start() {
 
     const itemProto = CONFIG.Item.documentClass?.prototype;
     patch(itemProto, "rollDamage", wrapRollDamage);
+    patch(itemProto, "roll", wrapItemRoll);
     patch(itemProto, "placeAbilityTemplate", wrapPlaceAbilityTemplate);
 
     bar.load();

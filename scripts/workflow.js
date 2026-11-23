@@ -554,6 +554,66 @@ function damageFlow(item) {
     return null;
 }
 
+/** Save effects with no damage and no attack (daze, hold person, overload): they run when used. */
+function saveOnlyFlow(item) {
+    if (!getSetting("enabled") || !getSetting("automateSaves")) return false;
+    if (!isHandledItem(item?.actor, item)) return false;
+    if (!item.hasSave || item.hasDamage || item.hasAttack) return false;
+    const p = item.system?.properties ?? {};
+    if (["explode", "blast", "line"].some(k => p[k]?.value)) return false;
+    return true;
+}
+
+/** Wraps sfrpg's Item.roll (using an item from the sheet; useSpell ends here too). */
+export function wrapItemRoll(original) {
+    return async function (...args) {
+        const item = this;
+        let run = false;
+        try {
+            run = saveOnlyFlow(item);
+        } catch (err) {
+            console.warn(`${MODULE_ID} |`, err);
+        }
+        const targets = run ? currentTargets() : [];
+        if (!run || !targets.length) return original.apply(this, args);
+        if (!gmConnected()) {
+            warnNoGM();
+            return original.apply(this, args);
+        }
+        const actor = item.actor;
+        const attackerToken = findAttackerToken(actor);
+        const { cover, fromGm: coverFromGm } = bar.consumeCoverInfo();
+        const result = await original.apply(this, args);
+        if (getSetting("clearTargets")) clearTargets();
+        consumeTemplate(item);
+        const type = itemSaveType(item);
+        const eff = saveEffect(item.system.save?.descriptor);
+        const save = { type, label: SAVE_LABEL[type] ?? type, dc: itemSaveDC(item), base: null, parts: [], ...eff };
+        const hasArea = !!areaOf(item);
+        const out = targets.map(t => {
+            const d = targetData(t);
+            const w = hasArea ? null : saveRangeWarning(item, attackerToken, t);
+            if (w) d.rangeWarning = w;
+            return d;
+        });
+        await send("processSave", {
+            workflowId: foundry.utils.randomID(),
+            kind: KIND.SAVE,
+            saveOnly: true,
+            userId: game.user.id,
+            time: Date.now(),
+            attacker: attackerData(actor, attackerToken),
+            item: itemData(item),
+            save, cover, coverFromGm, options: [],
+            nonlethal: false,
+            properties: damageProperties(item),
+            targets: out,
+            damage: { normal: [], crit: [] }
+        });
+        return result;
+    };
+}
+
 /**
  * Save and damage-only effects with several damage parts: sfrpg's quick roll rolls every part, but
  * many effects mean one of them (injury echo's damage type, fuel for the fires' single or area

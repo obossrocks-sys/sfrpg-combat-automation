@@ -70,7 +70,7 @@ function publicRow(t, wf) {
     if (t.riderPending) extra += `<span class="sca-status">Save: rolling…</span>`;
     let dmg = "";
     if (ap && !undone) dmg = `<span class="sca-dmg">${ap.dealt} damage</span>`;
-    else if (!undone && isSaveKind(wf) && !wf.save?.noEffect && t.result !== RESULT.PENDING && (t.factor ?? 0) === 0) dmg = `<span class="sca-dmg">no damage</span>`;
+    else if (!undone && isSaveKind(wf) && !wf.save?.noEffect && !wf.saveOnly && t.result !== RESULT.PENDING && (t.factor ?? 0) === 0) dmg = `<span class="sca-dmg">no damage</span>`;
     const status = ap?.status && !undone ? `<span class="sca-status">${esc(ap.status)}</span>` : "";
     return `<li class="sca-row sca-${resultClass(t.result)}">
         <img src="${esc(t.img)}" alt="">
@@ -201,7 +201,7 @@ function gmSaveRow(t, i, wf) {
     const shares = (!wf.undone && !pending && (t.flagged || t.override || t.result === RESULT.MANUAL))
         ? `<div class="sca-line sca-share">${btn("share", "Full", i, "full")}${btn("share", "Half", i, "half")}${btn("share", "None", i, "none")}</div>`
         : "";
-    if (!ap && !wf.undone && !pending && (t.factor ?? 0) > 0) buttons.push(btn("apply", "Apply", i));
+    if (!ap && !wf.undone && !pending && (t.factor ?? 0) > 0 && !(wf.saveOnly && t.l3)) buttons.push(btn("apply", "Apply", i));
     return `<li class="sca-row sca-gm-row sca-${resultClass(t.result)}">
         <div class="sca-row-head">
             <img src="${esc(t.img)}" alt="">

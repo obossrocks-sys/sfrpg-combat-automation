@@ -204,6 +204,7 @@ async function zeroHp(actor, tokenDoc, nonlethal, { before, incoming }) {
  * Fills t.applied.
  */
 export async function applyToTarget(wf, t, key, factor = 1) {
+    if (wf.saveOnly) return; // conditions only: layer 3 handles them
     const sections = wf.damage?.[key] ?? [];
     if (!sections.length) {
         t.note = "no damage rolled";
