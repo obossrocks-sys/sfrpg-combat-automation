@@ -25,6 +25,12 @@ const on = () => {
     }
 };
 
+/**
+ * Only player characters and drones track ammunition and uses. sfrpg NPCs don't (a weapon dragged
+ * onto an NPC usually sits at 0 charges with its ammo type cleared), so NPC ammo stays the GM's.
+ */
+const tracked = (item) => ["character", "drone"].includes(item?.actor?.type);
+
 export const isGrenade = (item) => item?.type === "weapon" && item.system?.weaponType === "grenade";
 
 /** Ammunition one shot uses, with sfrpg's usage modifiers. 0 when the weapon uses none. */
@@ -49,7 +55,7 @@ export const ammoLeft = (item) => Number(item?.getCurrentCapacity?.() ?? item?.s
 
 /** Why this weapon can't attack right now, or null. */
 export function emptyMessage(item) {
-    if (!on() || item?.type !== "weapon") return null;
+    if (!on() || item?.type !== "weapon" || !tracked(item)) return null;
     if (isGrenade(item) && (Number(item.system?.quantity) || 0) < 1) return `${item.name}: none left.`;
     if (!usesAmmo(item)) return null;
     const need = usageOf(item);
@@ -80,20 +86,20 @@ function usesOf(item) {
 
 /** Before using an ability: null if fine, else the message. */
 export function noUsesMessage(item) {
-    if (!on()) return null;
+    if (!on() || !tracked(item)) return null;
     const u = usesOf(item);
     return u && u.value <= 0 ? `${item.name} has no uses left.` : null;
 }
 
 /** After using it: spend a use unless sfrpg already did. */
 export async function spendUse(item, before) {
-    if (!on() || !before) return;
+    if (!on() || !before || !tracked(item)) return;
     const now = usesOf(item);
     if (!now || now.value < before.value) return;
     await item.update({ "system.uses.value": Math.max(0, before.value - 1) });
 }
 
-export const usesBefore = (item) => (on() ? usesOf(item) : null);
+export const usesBefore = (item) => (on() && tracked(item) ? usesOf(item) : null);
 
 /* ---------- grenades ---------- */
 
@@ -134,7 +140,7 @@ export function wrapRollAttack(original) {
         }
         if (!rolled) return result;
         try {
-            if (isGrenade(item) && on() && !skip) {
+            if (isGrenade(item) && on() && !skip && tracked(item)) {
                 // Let sfrpg's own capacity update land first, or it would undo the draw.
                 const until = Date.now() + 2000;
                 while (ammoLeft(item) >= capBefore && capBefore > 0 && Date.now() < until) await new Promise(r => setTimeout(r, 100));
@@ -156,7 +162,7 @@ export function wrapRollAttack(original) {
  * shot by the time the attack hook runs. Returns { tokens, info } and spends the rest.
  */
 export async function automaticAmmo(item, tokens, attackerToken) {
-    if (!on() || !usesAmmo(item)) return { tokens, info: null };
+    if (!on() || !usesAmmo(item) || !tracked(item)) return { tokens, info: null };
     const shot = usageOf(item);
     const left = ammoLeft(item);
     const available = left + shot;

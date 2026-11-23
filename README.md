@@ -50,6 +50,7 @@ sfrpg already spends a weapon's usage on each attack, refills on Reload, and spe
 - **Grenades leave the inventory:** a throw takes one from the quantity and draws the next if any are left; with none left, the grenade can't be thrown.
 - **Automatic mode** (CRB 180): two shots' worth per creature, nearest first (ties at the cut picked at random), stopping when the ammunition can't pay for the next creature; the attack uses all the remaining ammunition. The GM card shows what was loaded and who wasn't attacked; the public card names them.
 - **Abilities with limited uses** (feats) that attack or roll damage spend a use, and can't be used with none left. Consumables and other gear stay with sfrpg's Use button.
+- **Player characters and drones only** (0.4.1): sfrpg NPCs don't track ammunition (a weapon dragged onto an NPC usually sits at 0 charges), so NPC ammo and uses stay with the GM.
 - Setting: **Ammunition and limited uses** (world, on).
 
 ## Attack-options bar
