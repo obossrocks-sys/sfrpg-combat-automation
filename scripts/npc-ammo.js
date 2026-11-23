@@ -327,19 +327,13 @@ export async function askReload(item, spare, left, need) {
     return choice === "reload";
 }
 
-/** Reload with sfrpg's own Reload, wait for it to land, and note the move action for the GM. */
+/** Reload with sfrpg's own Reload (its card says "Cost: Move Action") and wait for it to land. */
 export async function reloadNow(item, spare, need) {
     const before = Number(item.getCurrentCapacity?.()) || 0;
     await item.reload?.();
     const until = Date.now() + 2000;
     while ((Number(item.getCurrentCapacity?.()) || 0) <= before && Date.now() < until) await new Promise(r => setTimeout(r, 100));
-    const now = Number(item.getCurrentCapacity?.()) || 0;
-    await ChatMessage.create({
-        content: `<p><strong>${esc(who(item))}</strong> reloaded ${esc(item.name)} with ${esc(spare.name)} (${now} loaded): <strong>its move action</strong> this turn.</p>`,
-        whisper: ChatMessage.getWhisperRecipients("GM").map(u => u.id),
-        speaker: ChatMessage.getSpeaker({ actor: item.actor })
-    });
-    return now >= need;
+    return (Number(item.getCurrentCapacity?.()) || 0) >= need;
 }
 
 export const noSpareMessage = (item) => `${who(item)}: ${item.name} is empty and it carries no spare ammunition. Ctrl-click to attack anyway.`;
