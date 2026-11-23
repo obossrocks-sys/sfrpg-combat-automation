@@ -238,6 +238,7 @@ test("goods: sniper rounds", () => assert.deepEqual(parseGoodsAmmo("10 Sniper Ro
 test("goods: long-arm", () => assert.deepEqual(parseGoodsAmmo("24 Long-arm Rounds", 1), { type: "roundL", rounds: 24 }));
 test("goods: plain rounds", () => assert.deepEqual(parseGoodsAmmo("15 Rounds", 1), { type: null, rounds: 15 }));
 test("goods: a box", () => assert.deepEqual(parseGoodsAmmo("Rounds, Small Arm", 2), { type: "roundS", rounds: null, packs: 2 }));
+test("goods: a count of rounds", () => assert.deepEqual(parseGoodsAmmo("Rounds, Longarm and Sniper", 400), { type: "roundL", rounds: 400 }));
 test("goods: not ammo", () => assert.equal(parseGoodsAmmo("Credstick (500 credits)", 1), null));
 test("spare battery fits", () => assert.equal(spareFits({ ammunitionType: "charge", useCapacity: true, current: 20, capacityMax: 20 }, { ammunitionType: "charge", current: 0, capacityMax: 20 }), true));
 test("spare battery too big", () => assert.equal(spareFits({ ammunitionType: "charge", useCapacity: true, current: 40, capacityMax: 40 }, { ammunitionType: "charge", current: 0, capacityMax: 20 }), false));

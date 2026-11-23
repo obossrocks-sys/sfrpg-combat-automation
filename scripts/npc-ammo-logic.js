@@ -65,7 +65,7 @@ export const defaultSpareLoads = (weaponType) => (["smallA", "longA", "sniper"].
  * A stat block's ammunition "goods" line, or null.
  * "2 High-Capacity Batteries (40 Charges Each" → { type: "charge", size: 40, count: 2 }
  * "4 Magazines (100 Longarm Rounds" → { type: "roundL", rounds: 100 }
- * "Rounds, Small Arm" (quantity 1) → { type: "roundS", rounds: null, packs: 1 }
+ * "Rounds, Small Arm" (quantity 1) → { type: "roundS", rounds: null, packs: 1 } (quantity 400 → rounds: 400)
  * "15 Rounds" → { type: null, rounds: 15 } (the type comes from the NPC's weapon)
  */
 export function parseGoodsAmmo(name, quantity = 1) {
@@ -86,7 +86,8 @@ export function parseGoodsAmmo(name, quantity = 1) {
     ];
     for (const [re, type] of cart) {
         if (!re.test(n)) continue;
-        const rounds = paren ? Number(paren[1]) : lead ? Number(lead[1]) : null;
+        // No number in the name: a quantity of 10 or more is a count of rounds, a smaller one of boxes.
+        const rounds = paren ? Number(paren[1]) : lead ? Number(lead[1]) : q >= 10 ? q : null;
         return rounds ? { type, rounds } : { type, rounds: null, packs: q };
     }
     return null;
