@@ -9,6 +9,7 @@
  * save): ItemSFRPG.rollDamage is wrapped so the roll's sections are collected, then the targets'
  * saves are run on the GM's client.
  */
+import { itemEffectsData, itemCritData } from "./conditions.js";
 import { MODULE_ID, RESULT, KIND, ATTACK_OPTIONS } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { resolveTarget, naturalD20, pickAcKey, saveRangeWarning, hasFarShot } from "./rules.js";
@@ -269,7 +270,9 @@ function itemData(item) {
         uuid: item.uuid, name: item.name, img: item.img, type: item.type, hasDamage: !!item.hasDamage,
         publicName: hide ? stripDCs(item.name).trim() : item.name,
         allowsSR: item.type === "spell" && !!item.system?.sr,
-        mindAffecting: isMindAffecting(item)
+        mindAffecting: isMindAffecting(item),
+        effects: itemEffectsData(item),
+        crit: itemCritData(item)
     };
 }
 

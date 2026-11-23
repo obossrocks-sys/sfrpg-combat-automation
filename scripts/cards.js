@@ -7,6 +7,7 @@ import { MODULE_ID, RESULT, RESULT_LABEL, ATTACK_OPTIONS, COVER, KIND } from "./
 import { AC_LABEL } from "./rules.js";
 import { gmAction } from "./apply.js";
 import { SAVE_LABEL, compass } from "./logic.js";
+import { effectSummary } from "./conditions.js";
 
 const esc = (s) => foundry.utils.escapeHTML(String(s ?? ""));
 const SAVE_KINDS = [KIND.SAVE, KIND.DAMAGE, KIND.EXPLODE];
@@ -74,7 +75,7 @@ function publicRow(t, wf) {
     return `<li class="sca-row sca-${resultClass(t.result)}">
         <img src="${esc(t.img)}" alt="">
         <span class="sca-name">${esc(t.name)}</span>
-        <span class="sca-res">${esc(resultText(t, wf))}</span>${extra}${dmg}${status}
+        <span class="sca-res">${esc(resultText(t, wf))}</span>${extra}${dmg}${status}${publicEffects(t, wf)}
     </li>`;
 }
 
@@ -113,6 +114,33 @@ function damageLines(ap) {
 
 const btn = (action, label, i, value) =>
     `<button type="button" class="sca-btn" data-sca-action="${action}"${i != null ? ` data-sca-index="${i}"` : ""}${value ? ` data-sca-value="${value}"` : ""}>${label}</button>`;
+
+/** Layer 3 lines for the GM card: conditions, critical hit effects, Remove and pick buttons. */
+function gmEffectLines(t, i, wf) {
+    const s = effectSummary(t);
+    if (!s) return "";
+    const out = [];
+    if (s.conds.length) {
+        out.push(`<div class="sca-line sca-l3"><i class="fa-solid fa-circle-exclamation"></i> ${esc(s.conds.map(c => c.text + (c.assumed ? " (no duration listed)" : "")).join(" · "))}</div>`);
+    }
+    s.crits.forEach((c, li) => {
+        const picks = (c.choices ?? []).map(ch => btn("pick", esc(ch.name), i, `${li}|${ch.tokenUuid}`)).join("");
+        out.push(`<div class="sca-line sca-l3"><i class="fa-solid fa-burst"></i> Crit: ${esc(c.gmText ?? c.text)}${picks && !wf.undone ? `<span class="sca-picks">${picks}</span>` : ""}</div>`);
+    });
+    if (s.resave) out.push(`<div class="sca-line sca-notes">It can try a new save each round on its turn (roll it by hand; Remove conditions on a success)</div>`);
+    const active = (t.l3.conds ?? []).some(r => !r.removed && (r.applied || r.extended)) || (t.l3.crit ?? []).some(l => (l.rec && !l.rec.removed && l.rec.applied) || (l.ongoing && !l.ongoing.removed && l.ongoing.applied));
+    if (active && !wf.undone) out.push(`<div class="sca-line sca-share">${btn("uncond", "Remove conditions", i)}</div>`);
+    return out.join("");
+}
+
+/** Layer 3 for the public card: what happened, without DCs. */
+function publicEffects(t, wf) {
+    if (wf.undone) return "";
+    const s = effectSummary(t);
+    if (!s) return "";
+    const bits = [...s.conds.filter(c => !c.gm).map(c => c.text), ...s.crits.map(c => `crit: ${c.text}`)];
+    return bits.length ? `<span class="sca-status sca-l3">${esc(bits.join(" · "))}</span>` : "";
+}
 
 function byText(by) {
     if (!by || by === "gm") return "rolled by the GM's client";
@@ -181,7 +209,7 @@ function gmSaveRow(t, i, wf) {
             <span class="sca-res">${esc(res)}</span>
             ${buttons.join("")}
         </div>
-        ${rangeLine}${srLine(t)}${saveLine(t.save, wf.save?.label ?? "")}${evasionLine(t)}${flagLine}${shares}${noteLine}${damageLines(ap)}
+        ${rangeLine}${srLine(t)}${saveLine(t.save, wf.save?.label ?? "")}${evasionLine(t)}${flagLine}${shares}${noteLine}${damageLines(ap)}${gmEffectLines(t, i, wf)}
     </li>`;
 }
 
@@ -225,7 +253,7 @@ function gmAttackRow(t, i, wf) {
             ${wf.undone ? "" : btn("flip", flipLabel, i)}
             ${canApply ? btn("apply", "Apply", i) : ""}
         </div>
-        ${reachLine}${roll}${riderLine}${noteLine}${damageLines(ap)}
+        ${reachLine}${roll}${riderLine}${noteLine}${damageLines(ap)}${gmEffectLines(t, i, wf)}
     </li>`;
 }
 

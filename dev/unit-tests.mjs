@@ -7,6 +7,7 @@ import {
     saveSucceeds, saveEffect, damageFactor, scaled, rangePenaltyFor, scatterStep, compass,
     feetIn, areaSpec, stripDCs, isAbilityDamagePart, isHealingPart, partName, mindImmune
 } from "../scripts/logic.js";
+import { parseEffectText, linkedConditions, effectsFromItem, spellDurationField, parseCrit, critSaveDC, immuneTo, roundsIn, isDue, durationLabel, allowsNewSave } from "../scripts/effects.js";
 
 let passed = 0;
 const test = (name, fn) => {
@@ -156,5 +157,47 @@ test("undead are mind-immune", () => assert.equal(mindImmune({ type: "Undead" })
 test("constructs are mind-immune", () => assert.equal(mindImmune({ type: "Construct (technological)" }), true));
 test("immunity text", () => assert.equal(mindImmune({ type: "", ciCustom: "Undead Immunities" }), true));
 test("humanoid isn't", () => assert.equal(mindImmune({ type: "Humanoid (goblinoid)", ciCustom: "" }), false));
+
+// Layer 3: conditions from sfrpg's data
+const one = (t) => parseEffectText(t);
+test("flash grenade flavor", () => assert.deepEqual(one("blinded [[1d4]] rounds"), [{ cond: "blinded", dur: { formula: "1d4", unit: "round" }, amount: null }]));
+test("screamer flavor, minutes", () => assert.deepEqual(one("deafened [[1d4]] minutes")[0].dur, { formula: "1d4", unit: "minute" }));
+test("cryo flavor", () => assert.deepEqual(one("staggered 1 round")[0].dur, { formula: "1", unit: "round" }));
+test("incendiary flavor is burning with damage", () => assert.deepEqual(one("burning 1d4"), [{ cond: "burning", dur: null, amount: "1d4" }]));
+test("riot: staggered gets 1 round", () => assert.deepEqual(effectsFromItem({ chatFlavor: "staggered" }).list[0].dur, { formula: "1", unit: "round", assumed: true }));
+test("stickybomb description", () => assert.deepEqual(effectsFromItem({ description: "A stickybomb grenade detonates. @UUID[Compendium.sfrpg.conditions.Item.nFBcsp5FS1Wi46Fc]{Entangled} [[/r 2d4]]{2d4 rounds}" }).list, [{ cond: "entangled", dur: { formula: "2d4", unit: "round" }, amount: null }]));
+test("two conditions", () => assert.deepEqual(one("nauseated and sickened 1d4 rounds").map(e => e.cond), ["nauseated", "sickened"]));
+test("dead and broken aren't inflicted", () => assert.deepEqual(one("dead, broken"), []));
+test("off-kilter keeps its hyphen", () => assert.equal(one("off-kilter for 2 rounds")[0].cond, "off-kilter"));
+test("flat-footed isn't footed", () => assert.deepEqual(one("flat-footed").map(e => e.cond), ["flat-footed"]));
+test("spell links", () => assert.deepEqual(linkedConditions("is @UUID[Compendium.sfrpg.conditions.Item.2X]{Dazed} (unable) and @UUID[Compendium.sfrpg.conditions.Item.2X]{Dazed}"), ["dazed"]));
+test("daze uses its duration", () => assert.deepEqual(effectsFromItem({ description: "is @UUID[Compendium.sfrpg.conditions.Item.2X]{Dazed} (unable to act)", spellDuration: { formula: "1", unit: "round" } }).list[0].dur, { formula: "1", unit: "round" }));
+test("hold person resave", () => assert.equal(effectsFromItem({ description: "becomes @UUID[Compendium.sfrpg.conditions.Item.N]{Paralyzed}. Each round on its turn, the target can attempt a new saving throw" }).resave, true));
+test("no links, no effects", () => assert.equal(effectsFromItem({ description: "You cause all targets to lose proficiency" }).list.length, 0));
+test("duration field", () => assert.deepEqual(spellDurationField({ units: "round", value: "@details.cl.value" }), { formula: "@details.cl.value", unit: "round" }));
+test("instantaneous isn't a duration", () => assert.equal(spellDurationField({ units: "instantaneous", value: "" }), null));
+test("new save text", () => assert.equal(allowsNewSave("no save here"), false));
+
+// Layer 3: critical hit effects (CRB 182-183, Armory 26)
+const pc = (t) => parseCrit(t).map(e => [e.key, e.amount]);
+test("burn 1d6", () => assert.deepEqual(pc("Burn 1d6"), [["burn", "1d6"]]));
+test("arc and knockdown", () => assert.deepEqual(pc("Arc 1d6, knockdown"), [["arc", "1d6"], ["knockdown", null]]));
+test("push distance", () => assert.deepEqual(pc("Push (5 ft.)"), [["push", "5 ft"]]));
+test("injection", () => assert.deepEqual(pc("Injection DC +2"), [["injection dc", "2"]]));
+test("staggared typo", () => assert.deepEqual(pc("staggared"), [["staggered", null]]));
+test("severe wound", () => assert.deepEqual(pc("Severe wound"), [["severe wound", null]]));
+test("second arc", () => assert.deepEqual(pc("Second arc 1d6"), [["second arc", "1d6"]]));
+test("unknown effect", () => assert.equal(parseCrit("Digitize 1d6")[0].key, "unknown"));
+test("empty crit", () => assert.deepEqual(parseCrit("—"), []));
+test("crit DC", () => assert.equal(critSaveDC(5, 3, -2), 13));
+test("undead immune to stun", () => assert.equal(immuneTo({ type: "Undead" }, "stun"), true));
+test("construct immune to bleed", () => assert.equal(immuneTo({ type: "Construct (technological)" }, "bleed"), true));
+test("humanoid not immune", () => assert.equal(immuneTo({ type: "Humanoid (vesk)" }, "stun"), false));
+test("ci list", () => assert.equal(immuneTo({ ci: ["blinded"] }, "blinded"), true));
+test("minutes to rounds", () => assert.equal(roundsIn(2, "minute"), 20));
+test("due at the origin's turn", () => assert.equal(isDue({ round: 3, turn: 2 }, { round: 3, turn: 2 }), true));
+test("not due before it", () => assert.equal(isDue({ round: 3, turn: 2 }, { round: 3, turn: 1 }), false));
+test("due in a later round", () => assert.equal(isDue({ round: 3, turn: 2 }, { round: 4, turn: 0 }), true));
+test("duration label", () => assert.equal(durationLabel(1, "round"), "1 round"));
 
 console.log(`${passed} passed${process.exitCode ? ", some failed" : ""}`);

@@ -3,6 +3,8 @@ import { registerSettings, applyGmView } from "./settings.js";
 import { setupSocket, registerHandler } from "./socket.js";
 import { onAttackRolled, onDamageRolled, onPreCreateChatMessage, wrapRollDamage } from "./workflow.js";
 import { processAttack, processSave, onDeadStatus } from "./apply.js";
+import { onCombatTurn, onCombatEnd, onWorldTime } from "./conditions.js";
+import * as effects from "./effects.js";
 import { promptSave } from "./saves.js";
 import { onRenderChatMessage } from "./cards.js";
 import { wrapPlaceAbilityTemplate, onPreCreateTemplate, onCreateTemplate, onPreCreateRegion, onCreateRegion, explodeArea } from "./areas.js";
@@ -51,7 +53,10 @@ function start() {
     on("createActiveEffect", (effect) => { onDeadStatus(effect).catch(err => console.error(`${MODULE_ID} |`, err)); });
     on("updateCombat", (combat, changed) => {
         if ("turn" in changed || "round" in changed) bar.onTurnChange();
+        onCombatTurn(combat, changed).catch(err => console.error(`${MODULE_ID} |`, err));
     });
+    on("deleteCombat", (combat) => { onCombatEnd(combat).catch(err => console.error(`${MODULE_ID} |`, err)); });
+    on("updateWorldTime", onWorldTime);
 
     const itemProto = CONFIG.Item.documentClass?.prototype;
     patch(itemProto, "rollDamage", wrapRollDamage);
@@ -61,7 +66,7 @@ function start() {
     bar.render();
     applyGmView();
 
-    const api = { bar, rules, logic, explodeArea, teardown, version: game.modules.get(MODULE_ID)?.version };
+    const api = { bar, rules, logic, effects, explodeArea, teardown, version: game.modules.get(MODULE_ID)?.version };
     globalThis.SFRPGCombatAutomation = api;
     const mod = game.modules.get(MODULE_ID);
     if (mod) mod.api = api;

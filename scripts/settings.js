@@ -21,6 +21,21 @@ export function registerSettings() {
         hint: "Apply damage to the targets as soon as it is rolled (Undo stays on the card). Off: the GM card offers an Apply button instead.",
         scope: "world", config: true, type: Boolean, default: true
     });
+    reg("applyConditions", {
+        name: "Conditions from failed saves",
+        hint: "A failed save against a grenade, explode weapon, spell or ability gives the conditions in its data (a grenade's effect line, a spell's condition links) for their duration. The module removes them when the time is up; conditions set by hand are never touched.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
+    reg("critEffects", {
+        name: "Critical hit effects",
+        hint: "On a critical hit, roll the weapon's critical effect (CRB 182, Armory 26): conditions with their saves, burn, bleed and corrode, arc and pulse damage; the rest is shown to the GM with its DC.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
+    reg("ongoingDamage", {
+        name: "Burning, bleeding and corrode each turn",
+        hint: "Deal ongoing damage at the start of the creature's turn; burning and corrode get a Reflex save at the end of its turn (DC 10 + that round's damage); bleeding stops once the creature is healed.",
+        scope: "world", config: true, type: Boolean, default: true
+    });
     reg("zeroHpConditions", {
         name: "Conditions at 0 HP",
         hint: "NPCs die (or fall unconscious from nonlethal) and are marked defeated; PCs become dying and unconscious (or unconscious and stable from nonlethal).",

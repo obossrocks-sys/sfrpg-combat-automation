@@ -9,6 +9,7 @@ import { createCards, updateCards } from "./cards.js";
 import { rollDamageSections } from "./workflow.js";
 import { saveSucceeds, damageFactor, scaled } from "./logic.js";
 import { rollSaveFor, evasionOf, spellResistanceOf, rollSpellResistance, immuneToMind } from "./saves.js";
+import { applyItemEffects, applyCritEffects, undoEffects, removeEffects, pickSecondary } from "./conditions.js";
 
 const PC_TYPES = ["character"];
 const NPC_TYPES = ["npc", "npc2"];
@@ -285,6 +286,25 @@ const isSaveResult = (t) => [RESULT.SAVED, RESULT.FAILED, RESULT.RESISTED, RESUL
 const keyOf = (t) => (t.result === RESULT.CRIT || t.critTarget ? "crit" : "normal");
 const shareOf = (t) => (t.factor ?? 1);
 
+/**
+ * Layer 3 for one target, once: an item's conditions on a failed save (or a failed rider save),
+ * and the weapon's critical hit effects on a crit (or the creature nearest an explode crit).
+ */
+async function effectsFor(wf, t) {
+    if (t.l3 || wf.undone) return;
+    const { actor } = await targetActor(t);
+    if (!actor) return;
+    const saveFlow = [KIND.SAVE, KIND.DAMAGE, KIND.EXPLODE].includes(wf.kind);
+    if (saveFlow ? t.result === RESULT.FAILED : (t.save?.rider && t.save.saved === false && isHit(t))) {
+        await applyItemEffects(wf, t, actor);
+    }
+    const critHere = t.result === RESULT.CRIT || (t.critTarget && [RESULT.FAILED, RESULT.SAVED].includes(t.result));
+    if (critHere && !t.stopped) await applyCritEffects(wf, t, actor);
+    if (t.l3 && !Object.keys(t.l3).length) t.l3 = null;
+}
+
+const hasCritFx = (wf) => !!wf.item?.crit?.effects?.length && wf.targets.some(t => t.result === RESULT.CRIT);
+
 /** Card updates for one workflow happen one at a time, in order. */
 const queues = new Map();
 function enqueue(id, fn) {
@@ -401,6 +421,7 @@ async function runSaves(wf, gmMessage) {
             if (t.result !== RESULT.RESISTED) await resolveSave(wf, t, actor);
         }
         if (auto && t.factor > 0) await applyToTarget(wf, t, keyOf(t), t.factor);
+        if (auto) await effectsFor(wf, t);
         await enqueue(wf.workflowId, () => updateCards(gmMessage, wf));
     };
     // NPC saves resolve at once; players' prompts run side by side.
@@ -450,8 +471,15 @@ export async function processAttack(wf) {
         return true;
     }
     if (auto) await applyHits(wf);
-    await createCards(wf);
+    const gmMessage = await createCards(wf);
+    if (auto && hasCritFx(wf)) runCrits(wf, gmMessage).catch(err => console.error(`${MODULE_ID} |`, err));
     return true;
+}
+
+/** Critical hit effects can wait on a player's save prompt, so they run after the cards are up. */
+async function runCrits(wf, gmMessage) {
+    for (const t of wf.targets) if (t.result === RESULT.CRIT) await effectsFor(wf, t);
+    await enqueue(wf.workflowId, () => updateCards(gmMessage, wf));
 }
 
 /** Attacks whose item also calls for a save: roll it for each creature hit; "half" halves the damage. */
@@ -475,6 +503,7 @@ async function runRider(wf, gmMessage, auto) {
         t.evaded = wf.rider.onSave === "half" ? (f.evaded ?? null) : null;
     }));
     if (auto) await applyHits(wf);
+    if (auto) for (const t of wf.targets) if (isHit(t)) await effectsFor(wf, t);
     await enqueue(wf.workflowId, () => updateCards(gmMessage, wf));
 }
 
@@ -488,9 +517,13 @@ export async function gmAction(message, action, index, value) {
     const saveFlow = [KIND.SAVE, KIND.DAMAGE, KIND.EXPLODE].includes(wf.kind);
 
     if (action === "undo") {
-        for (const tt of wf.targets) await undoTarget(tt);
+        for (const tt of wf.targets) {
+            await undoTarget(tt);
+            await undoEffects(tt);
+        }
         wf.undone = true;
     } else if (action === "redo") {
+        wf.undone = false;
         if (saveFlow) {
             for (const tt of wf.targets) if (!tt.applied && shareOf(tt) > 0) await applyToTarget(wf, tt, keyOf(tt), shareOf(tt));
         } else {
@@ -498,11 +531,12 @@ export async function gmAction(message, action, index, value) {
                 if (!tt.applied && isHit(tt) && !tt.stopped && shareOf(tt) > 0) await applyToTarget(wf, tt, keyOf(tt), shareOf(tt));
             }
         }
-        wf.undone = false;
+        for (const tt of wf.targets) await effectsFor(wf, tt);
     } else if (action === "flip" && t) {
         // Attacks: hit <-> miss.
         if (isHit(t)) {
             await undoTarget(t);
+            await undoEffects(t);
             t.result = RESULT.MISS;
         } else {
             t.result = RESULT.HIT;
@@ -517,6 +551,7 @@ export async function gmAction(message, action, index, value) {
     } else if (action === "flipsave" && t) {
         // Saves: saved <-> failed; resisted or blocked -> roll the save now.
         await undoTarget(t);
+        await undoEffects(t);
         if (t.result === RESULT.SAVED || t.result === RESULT.FAILED) {
             setOutcome(wf, t, t.result !== RESULT.SAVED);
         } else if (t.result === RESULT.RESISTED || t.result === RESULT.BLOCKED) {
@@ -527,6 +562,7 @@ export async function gmAction(message, action, index, value) {
         t.flipped = !t.flipped;
         t.override = null;
         if (!wf.undone && shareOf(t) > 0) await applyToTarget(wf, t, keyOf(t), shareOf(t));
+        if (!wf.undone) await effectsFor(wf, t);
     } else if (action === "share" && t) {
         // Full, half or none, for flagged rows (partial saves) or any judgment call.
         const f = { full: 1, half: 0.5, none: 0 }[value];
@@ -538,6 +574,12 @@ export async function gmAction(message, action, index, value) {
         if (!wf.undone && f > 0) await applyToTarget(wf, t, keyOf(t), f);
     } else if (action === "apply" && t) {
         if (!t.applied && shareOf(t) > 0 && (saveFlow || isHit(t))) await applyToTarget(wf, t, keyOf(t), shareOf(t));
+        await effectsFor(wf, t);
+    } else if (action === "uncond" && t) {
+        await removeEffects(t);
+    } else if (action === "pick" && t && value) {
+        const [line, uuid] = String(value).split("|");
+        await pickSecondary(wf, t, Number(line), uuid);
     }
     await updateCards(message, wf);
 }

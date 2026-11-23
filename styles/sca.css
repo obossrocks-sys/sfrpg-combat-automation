@@ -67,3 +67,9 @@ body.sca-hide-public .chat-message.sca-public-msg { display: none; }
 #sca-bar .sca-grip:hover { color: #eee; }
 #sca-bar .sca-grip i { pointer-events: none; font-size: 12px; }
 #sca-bar .sca-gmcover { margin-left: 4px; padding: 0 5px; border-radius: 3px; background: #b8860b; color: #111; font-weight: bold; font-size: 11px; }
+
+/* Layer 3: conditions and critical hit effects */
+.sca-card .sca-l3 { color: var(--color-text-dark-secondary, inherit); }
+.sca-card .sca-line.sca-l3 i { margin-right: 3px; opacity: 0.8; }
+.sca-card .sca-status.sca-l3 { font-style: normal; }
+.sca-card .sca-picks { display: inline-flex; gap: 3px; margin-left: 4px; flex-wrap: wrap; }
