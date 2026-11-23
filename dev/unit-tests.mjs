@@ -7,7 +7,7 @@ import {
     saveSucceeds, saveEffect, damageFactor, scaled, rangePenaltyFor, scatterStep, compass,
     feetIn, areaSpec, stripDCs, isAbilityDamagePart, isHealingPart, partName, mindImmune
 } from "../scripts/logic.js";
-import { norm, matchWeapon, isIntegrated, pickAmmo, packOfSize, defaultSpareLoads, parseGoodsAmmo, spareFits } from "../scripts/npc-ammo-logic.js";
+import { duplicateGoods, norm, matchWeapon, isIntegrated, pickAmmo, packOfSize, defaultSpareLoads, parseGoodsAmmo, spareFits } from "../scripts/npc-ammo-logic.js";
 import { parseEffectText, linkedConditions, effectsFromItem, spellDurationField, parseCrit, critSaveDC, immuneTo, roundsIn, isDue, durationLabel, allowsNewSave } from "../scripts/effects.js";
 
 let passed = 0;
@@ -239,6 +239,10 @@ test("goods: long-arm", () => assert.deepEqual(parseGoodsAmmo("24 Long-arm Round
 test("goods: plain rounds", () => assert.deepEqual(parseGoodsAmmo("15 Rounds", 1), { type: null, rounds: 15 }));
 test("goods: a box", () => assert.deepEqual(parseGoodsAmmo("Rounds, Small Arm", 2), { type: "roundS", rounds: null, packs: 2 }));
 test("goods: a count of rounds", () => assert.deepEqual(parseGoodsAmmo("Rounds, Longarm and Sniper", 400), { type: "roundL", rounds: 400 }));
+test("goods: magazines repeat the exact line", () => assert.deepEqual(duplicateGoods([
+    { name: "4 Magazines (100 Longarm Rounds", targetId: "L", targetName: "Rounds, Longarm and Sniper" },
+    { name: "Rounds, Longarm and Sniper", targetId: "L", targetName: "Rounds, Longarm and Sniper" },
+    { name: "Battery, Standard", targetId: "B", targetName: "Battery" }]), [0]));
 test("goods: not ammo", () => assert.equal(parseGoodsAmmo("Credstick (500 credits)", 1), null));
 test("spare battery fits", () => assert.equal(spareFits({ ammunitionType: "charge", useCapacity: true, current: 20, capacityMax: 20 }, { ammunitionType: "charge", current: 0, capacityMax: 20 }), true));
 test("spare battery too big", () => assert.equal(spareFits({ ammunitionType: "charge", useCapacity: true, current: 40, capacityMax: 40 }, { ammunitionType: "charge", current: 0, capacityMax: 20 }), false));

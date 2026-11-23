@@ -121,6 +121,7 @@ export async function planActor(actor) {
         }
         if (target && qty > 0) goods.push({ goods: g, target, quantity: qty });
     }
+    for (const i of L.duplicateGoods(goods.map(g => ({ name: g.goods.name, targetId: g.target.id, targetName: g.target.name })))) goods[i].drop = true;
     // Ammunition items already carried loose count as spares too.
     const carried = actor.items.filter(i => i.type === "ammunition" && loose(actor, i));
     const typesWithSpares = new Set([...goods.map(g => g.target.ammunitionType), ...carried.map(i => i.system?.ammunitionType)]);
@@ -152,7 +153,7 @@ export async function planActor(actor) {
             lines.push(`${n}: integrated, unlimited`);
         }
     }
-    for (const g of goods) lines.push(`goods "${g.goods.name}" → ${g.quantity} × ${g.target.name} (ammunition item)`);
+    for (const g of goods) lines.push(g.drop ? `goods "${g.goods.name}" dropped (the same ammunition as the "${g.target.name}" line)` : `goods "${g.goods.name}" → ${g.quantity} × ${g.target.name} (ammunition item)`);
     for (const s of spares.values()) lines.push(`spare: ${s.quantity} × ${s.entry.name}`);
     return { actor, weapons, goods, spares: [...spares.values()], lines };
 }
@@ -168,7 +169,7 @@ export async function applyPlan(plan) {
         foundry.utils.setProperty(obj, `flags.${MODULE_ID}.${FLAG}.loadedIn`, w.item.id);
         create.push(obj);
     }
-    for (const g of plan.goods) create.push(await ammoObject(g.target, g.quantity));
+    for (const g of plan.goods.filter(x => !x.drop)) create.push(await ammoObject(g.target, g.quantity));
     for (const s of plan.spares) create.push(await ammoObject(s.entry, s.quantity));
     if (plan.goods.length) await actor.deleteEmbeddedDocuments("Item", plan.goods.map(g => g.goods.id));
     const made = create.length ? await actor.createEmbeddedDocuments("Item", create) : [];

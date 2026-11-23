@@ -99,3 +99,14 @@ export function spareFits(spare, weapon) {
     if (spare.useCapacity) return spare.current > weapon.current && spare.capacityMax <= weapon.capacityMax;
     return spare.current > 0;
 }
+
+/**
+ * Goods lines that repeat another: when one line names the ammunition item exactly (the importer's
+ * line, "Rounds, Longarm and Sniper" ×400), a free-text line for the same item ("4 Magazines (100
+ * Longarm Rounds") describes the same ammunition. Returns the indexes to drop.
+ * list: [{ name, targetId, targetName }].
+ */
+export function duplicateGoods(list) {
+    const exact = new Set(list.filter(g => norm(g.name) === norm(g.targetName)).map(g => g.targetId));
+    return list.map((g, i) => (exact.has(g.targetId) && norm(g.name) !== norm(g.targetName) ? i : -1)).filter(i => i >= 0);
+}
