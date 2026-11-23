@@ -120,6 +120,7 @@ export function wrapRollAttack(original) {
             return null;
         }
         const uses = usesBefore(item);
+        const capBefore = ammoLeft(item);
         // Did the attack roll? (sfrpg's capacity update may not have landed when it returns.)
         let rolled = false;
         const hookId = Hooks.on("attackRolled", (data) => {
@@ -133,7 +134,12 @@ export function wrapRollAttack(original) {
         }
         if (!rolled) return result;
         try {
-            if (isGrenade(item) && on() && !skip) await afterGrenade(item);
+            if (isGrenade(item) && on() && !skip) {
+                // Let sfrpg's own capacity update land first, or it would undo the draw.
+                const until = Date.now() + 2000;
+                while (ammoLeft(item) >= capBefore && capBefore > 0 && Date.now() < until) await new Promise(r => setTimeout(r, 100));
+                await afterGrenade(item);
+            }
             if (uses) await spendUse(item, uses);
         } catch (err) {
             console.error(`${MODULE_ID} |`, err);
